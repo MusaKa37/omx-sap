@@ -10,12 +10,18 @@ import Projeler  from "./modules/Projeler";
 import Cariler   from "./modules/Cariler";
 import Malzeme   from "./modules/Malzeme";
 import Yapim     from "./modules/Yapim";
+import Depo      from "./modules/Depo";
+import SatinAlma from "./modules/SatinAlma";
+import Bom       from "./modules/Bom";
 
 const MODULLER = {
   dashboard: Panel,
   projeler:  Projeler,
   cariler:   Cariler,
   malzeme:   Malzeme,
+  depo:      Depo,
+  satinalma: SatinAlma,
+  bom:       Bom,
 };
 
 export default function App() {

@@ -2,7 +2,7 @@
 // OMX ortak arayüz bileşenleri.
 // ESATLAS'ta her modül kendi inline style'ını tekrar yazıyordu; burada tek kaynak.
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { T, DURUM_RENK, DURUM_ETIKET, CUR_SEMBOL } from "./theme";
 
 // ── Biçimlendiriciler ───────────────────────────────────────────────────────
@@ -214,6 +214,86 @@ export function Arama({ deger, onDegisim, yer = "Ara…", gecikme = 250, genisli
       {ic && <button onClick={() => setIc("")} style={{ position: "absolute", right: 8, top: "50%",
         transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer",
         color: T.renk.metinPasif, fontSize: 15 }}>×</button>}
+    </div>
+  );
+}
+
+// ── Aranabilir seçim kutusu ─────────────────────────────────────────────────
+// Binlerce malzeme arasından seçim yapmak için düz <select> kullanılamaz.
+// secenekler: [{ deger, etiket, alt? }]
+export function SecimAra({ deger, onSec, secenekler = [], yer = "Ara ve seç…",
+                           bos = "— seçilmedi —", disabled }) {
+  const [acik, setAcik] = useState(false);
+  const [ara, setAra]   = useState("");
+  const sarmal = useRef(null);
+
+  const secili = secenekler.find(o => String(o.deger) === String(deger));
+
+  useEffect(() => {
+    if (!acik) return;
+    const h = e => { if (sarmal.current && !sarmal.current.contains(e.target)) setAcik(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [acik]);
+
+  const suzulmus = useMemo(() => {
+    const q = trLower(ara).trim();
+    const liste = q
+      ? secenekler.filter(o => trLower(o.etiket).includes(q) || trLower(o.alt).includes(q))
+      : secenekler;
+    return liste.slice(0, 60);          // uzun listede tarayıcıyı boğmamak için
+  }, [ara, secenekler]);
+
+  return (
+    <div ref={sarmal} style={{ position: "relative" }}>
+      <button type="button" disabled={disabled} onClick={() => { setAcik(a => !a); setAra(""); }}
+        style={{ ...alanStil, textAlign: "left", cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? .6 : 1, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          color: secili ? T.renk.metin : T.renk.metinPasif }}>
+          {secili ? secili.etiket : bos}
+        </span>
+        <span style={{ color: T.renk.metinPasif, fontSize: 10 }}>▾</span>
+      </button>
+
+      {acik && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 300,
+          background: "#fff", border: `1px solid ${T.renk.cizgi}`, borderRadius: T.r.md,
+          boxShadow: T.golge.lg, maxHeight: 300, display: "flex", flexDirection: "column" }}>
+          <input autoFocus value={ara} onChange={e => setAra(e.target.value)} placeholder={yer}
+            style={{ border: "none", borderBottom: `1px solid ${T.renk.cizgi}`, padding: "9px 11px",
+              fontSize: T.yazi.md, outline: "none", borderRadius: `${T.r.md}px ${T.r.md}px 0 0` }} />
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            {deger !== "" && deger != null && (
+              <div onClick={() => { onSec(""); setAcik(false); }}
+                style={{ padding: "8px 11px", fontSize: T.yazi.sm, color: T.renk.metinPasif, cursor: "pointer" }}>
+                {bos}
+              </div>
+            )}
+            {!suzulmus.length ? (
+              <div style={{ padding: 16, textAlign: "center", fontSize: T.yazi.sm, color: T.renk.metinPasif }}>
+                Eşleşen kayıt yok
+              </div>
+            ) : suzulmus.map(o => (
+              <div key={o.deger} onClick={() => { onSec(o.deger); setAcik(false); }}
+                style={{ padding: "8px 11px", cursor: "pointer", fontSize: T.yazi.md,
+                  background: String(o.deger) === String(deger) ? T.renk.markaAcik : "transparent" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#f1f5f9"}
+                onMouseLeave={e => e.currentTarget.style.background =
+                  String(o.deger) === String(deger) ? T.renk.markaAcik : "transparent"}>
+                <div style={{ fontWeight: 500 }}>{o.etiket}</div>
+                {o.alt && <div style={{ fontSize: T.yazi.xs, color: T.renk.metinPasif }}>{o.alt}</div>}
+              </div>
+            ))}
+            {secenekler.length > 60 && !ara && (
+              <div style={{ padding: "7px 11px", fontSize: T.yazi.xs, color: T.renk.metinPasif,
+                borderTop: `1px solid ${T.renk.cizgi}` }}>
+                {secenekler.length} kayıttan ilk 60'ı — aramayı daraltın
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

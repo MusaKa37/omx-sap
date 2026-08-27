@@ -32,9 +32,9 @@ Mimari ve modül haritası: [OKUBENI.md](OKUBENI.md)
 | ✅ | **Projeler** | Proje kartı, iş kırılımı (WBS), maliyet defteri, revizyonlu doküman |
 | ✅ | **Müşteri & Tedarikçi** | Tek cari kartı, para birimi kırılımlı bakiye, vade, risk limiti |
 | ✅ | **Malzeme Kartları** | Otomasyon kategori ağacı, üretici parça no, kritik seviye, tedarikçi fiyatları |
-| ◻ | Ürün Ağacı (BOM) | Çok seviyeli ağaç, revizyon, pano etiketi, BOM → talep |
-| ◻ | Satın Alma | Talep → onay → sipariş → mal kabul, kur sabitleme |
-| ◻ | Depo & Stok | Çok depolu bakiye, transfer, sayım, rezerve |
+| ✅ | **Ürün Ağacı (BOM)** | Çok seviyeli ağaç, revizyon, pano etiketi, BOM → talep |
+| ✅ | **Satın Alma** | Talep → onay → sipariş → mal kabul, kur sabitleme |
+| ✅ | **Depo & Stok** | Çok depolu bakiye, transfer, sayım, rezerve |
 | ◻ | Puantaj | Proje × faaliyet saat girişi, harcırah, yönetici onayı |
 | ◻ | Servis & Ekipman | İş emri, ekipman parkı, PLC/HMI sürüm takibi, bakım takvimi |
 | ◻ | Teklif · Maliyet · Muhasebe | Teklif marjı, bütçe karşılaştırması, hakediş, cari ekstre |
