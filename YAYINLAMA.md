@@ -14,11 +14,16 @@ Site yayına alınsa bile veritabanı boşsa kimse giriş yapamaz. Sırayla:
 3. Alttaki özet tablosunda `tablo 38 · gorunum 5 · rol 8` görüyorsan kurulum tamam
 4. **Storage** → New bucket → ad: `omx-files`, Public işaretli
 5. **Authentication → Users → Add user** ile kendini ekle (e-posta + şifre)
-6. SQL Editor'de kendini yönetici yap:
+6. SQL Editor'de `db/kullanicilar.sql` dosyasını çalıştırıp rolleri ata.
+   Yönetici olacak adresleri o dosyanın başındaki listeye yaz:
    ```sql
-   update app_users set role_id = (select id from roles where kod='admin')
-    where email = 'senin@epostan';
+   update app_users
+      set role_id = (select id from roles where kod = 'admin')
+    where email in ('musa.karakurt@omx.com.tr',
+                    'ahmetoguzhan.demirci@omx.com.tr');
    ```
+   Betiğin sonundaki kontrol sorgusu kimin hangi rolde olduğunu listeler.
+   `UPDATE 0` görürsen hesap henüz Authentication tarafında oluşturulmamıştır.
 
 ## Yol A — Vercel CLI (git gerekmez, en hızlı)
 

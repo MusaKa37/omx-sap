@@ -98,7 +98,8 @@ language plpgsql security definer set search_path = public as $$
 begin
   insert into public.app_users (id, email, ad_soyad, role_id)
   values (new.id, new.email,
-          coalesce(new.raw_user_meta_data->>'ad_soyad', split_part(new.email,'@',1)),
+          coalesce(new.raw_user_meta_data->>'ad_soyad',
+                   initcap(replace(split_part(new.email,'@',1), '.', ' '))),
           (select id from roles where kod = 'saha' limit 1))
   on conflict (id) do nothing;
   return new;
