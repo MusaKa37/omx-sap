@@ -1126,6 +1126,53 @@ drop policy if exists p_ts_own on timesheets;
 create policy p_ts_own on timesheets for select to authenticated
   using (user_id = auth.uid() or has_perm('puantaj','onayla'));
 
+-- Döngünün ürettiği genel görüntüleme politikası p_ts_own'u OR ile deliyordu:
+-- puantaj.goruntule yetkisi olan herkes (ör. saha) tüm personelin kaydını ve
+-- saatlik maliyetini görebiliyordu. Genel politika kaldırılır; görünürlük
+-- yalnızca p_ts_own: kendi kaydı veya 'onayla' yetkisi.
+drop policy if exists p_sel_timesheets on timesheets;
+
+-- ── Herkes KENDİ rolünü ve o rolün izin satırlarını okuyabilsin ──────────────
+-- roles/role_permissions 'sistem' modülüne bağlı olduğundan admin/yönetici
+-- dışındaki roller yetki matrisini hiç okuyamıyor, uygulama onlara tamamen
+-- kilitleniyordu. Bu iki politika yalnızca kullanıcının kendi rol satırlarını açar.
+create or replace function current_role_id() returns bigint
+language sql stable security definer set search_path = public as $$
+  select role_id from app_users where id = auth.uid() and aktif
+$$;
+
+drop policy if exists p_self_role on roles;
+create policy p_self_role on roles for select to authenticated
+  using (id = current_role_id());
+
+drop policy if exists p_self_perms on role_permissions;
+create policy p_self_perms on role_permissions for select to authenticated
+  using (role_id = current_role_id());
+
+-- ── Puantaj onayı: 'onayla' yetkisi 'duzenle' istemeden onay verebilsin ──────
+-- Eski akış düz UPDATE atıyordu; RLS 'duzenle' istediği için (ör. muhasebe
+-- rolünde yok) güncelleme SESSİZCE 0 satır etkiliyor, ekranda ise "Onaylandı"
+-- görünüyordu. Onay bu RPC üzerinden yapılır ve yalnızca onay alanlarını değiştirir.
+create or replace function puantaj_onayla(p_id bigint, p_karar text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if p_karar not in ('bekliyor','onaylandi','reddedildi') then
+    raise exception 'Geçersiz karar: %', p_karar;
+  end if;
+  if not has_perm('puantaj','onayla') then
+    raise exception 'Bu işlem için yetkiniz yok.' using errcode = '42501';
+  end if;
+  update timesheets
+     set onay_durum   = p_karar::onay_durum,
+         onaylayan_id = case when p_karar = 'bekliyor' then null else auth.uid() end
+   where id = p_id;
+  if not found then
+    raise exception 'Puantaj kaydı bulunamadı (id=%).', p_id;
+  end if;
+end $$;
+revoke all on function puantaj_onayla(bigint, text) from public;
+grant execute on function puantaj_onayla(bigint, text) to authenticated;
+
 -- Yeni auth kullanıcısı → app_users kaydı (varsayılan rol: en düşük yetki)
 create or replace function handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$

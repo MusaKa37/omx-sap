@@ -48,6 +48,11 @@ export default function Panel({ profil, yetkiVar, goster, git }) {
   }, [projeler, siparis]);
 
   const netKar = ozet.ciro - ozet.maliyet;
+  // v_project_summary security_invoker olduğundan muhasebe görüntüleme yetkisi
+  // olmayan kullanıcıda faturalanan gelir/kur verisi RLS ile boş döner ve
+  // rakamlar SESSİZCE yanlış olur (her proje zararda görünür). Finansal
+  // kartlar yalnız muhasebe yetkisi olana gösterilir.
+  const finansGorur = yetkiVar("muhasebe");
 
   return (
     <>
@@ -66,12 +71,12 @@ export default function Panel({ profil, yetkiVar, goster, git }) {
           renk={ozet.geciken ? T.renk.hata : T.renk.basari}
           zemin={ozet.geciken ? T.renk.hataAcik : T.renk.basariAcik}
           alt={ozet.geciken ? "acil müdahale gerekiyor" : "takvime uygun"} />
-        <Olcum etiket="Faturalanan" deger={fmtPara(ozet.ciro)} ikon="₺"
-          renk={T.renk.basari} zemin={T.renk.basariAcik} alt="tüm projeler toplamı" />
-        <Olcum etiket="Net Kâr" deger={fmtPara(netKar)} ikon="∑"
+        {finansGorur && <Olcum etiket="Faturalanan" deger={fmtPara(ozet.ciro)} ikon="₺"
+          renk={T.renk.basari} zemin={T.renk.basariAcik} alt="tüm projeler toplamı" />}
+        {finansGorur && <Olcum etiket="Net Kâr" deger={fmtPara(netKar)} ikon="∑"
           renk={netKar >= 0 ? T.renk.basari : T.renk.hata}
           zemin={netKar >= 0 ? T.renk.basariAcik : T.renk.hataAcik}
-          alt={`maliyet ${fmtPara(ozet.maliyet)}`} />
+          alt={`maliyet ${fmtPara(ozet.maliyet)}`} />}
         <Olcum etiket="Açık Sipariş" deger={siparis.length} ikon="⇩"
           renk={ozet.gecikenSip ? T.renk.uyari : T.renk.marka}
           zemin={ozet.gecikenSip ? T.renk.uyariAcik : T.renk.markaAcik}
@@ -121,9 +126,9 @@ export default function Panel({ profil, yetkiVar, goster, git }) {
                   return <span style={{ color: asim ? T.renk.hata : T.renk.metin, fontWeight: asim ? 650 : 400 }}>
                     {fmtPara(r.maliyet_toplam)}</span>;
                 }},
-              { anahtar: "net_kar", baslik: "Net Kâr", hizala: "right", genislik: 120,
+              ...(finansGorur ? [{ anahtar: "net_kar", baslik: "Net Kâr", hizala: "right", genislik: 120,
                 render: r => <span style={{ color: Number(r.net_kar) >= 0 ? T.renk.basari : T.renk.hata, fontWeight: 650 }}>
-                  {fmtPara(r.net_kar)}</span> },
+                  {fmtPara(r.net_kar)}</span> }] : []),
             ]} />
         </div>
       )}

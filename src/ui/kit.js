@@ -71,7 +71,10 @@ export function DosyaRozet({ ad, boyut = 34 }) {
   );
 }
 
-// Türkçe/karışık sayı girdilerini doğru okur: "2.500,50" → 2500.5 · "1,250" → 1250
+// Türkçe/karışık sayı girdilerini doğru okur: "2.500,50" → 2500.5 · "12,5" → 12.5
+// Tek virgül HER ZAMAN ondalıktır ("12,500" → 12.5) — Türkçe yazımda binlik
+// ayracı virgül değil noktadır; eski sezgi "12,500"ü 12500 okuyup miktarları
+// 1000 kat şişiriyordu. Birden çok virgül ("1,250,000") binlik sayılır.
 export function parseSayi(s) {
   let str = String(s ?? "").replace(/[^0-9.,-]/g, "");
   if (!str) return NaN;
@@ -79,8 +82,7 @@ export function parseSayi(s) {
   if (c >= 0 && d >= 0) str = c > d ? str.replace(/\./g, "").replace(",", ".") : str.replace(/,/g, "");
   else if (c >= 0) {
     const p = str.split(",");
-    str = (p.length > 2 || (p.length === 2 && p[1].length === 3 && p[0].length <= 3 && p[0] !== "0"))
-      ? str.replace(/,/g, "") : str.replace(",", ".");
+    str = p.length > 2 ? str.replace(/,/g, "") : str.replace(",", ".");
   } else if (d >= 0) {
     const p = str.split(".");
     if (p.length > 2 || (p.length === 2 && p[1].length === 3 && p[0].length <= 3 && p[0] !== "0"))
@@ -88,6 +90,11 @@ export function parseSayi(s) {
   }
   return parseFloat(str);
 }
+
+// Sayıyı Türkçe girdi biçimine çevirir (nokta → virgül). Düzenleme formunu
+// veritabanı değeriyle doldururken KULLANILMALI: String(5.125) = "5.125"
+// inputa konursa parseSayi'nin binlik sezgisi bunu 5125 okur; "5,125" okumaz.
+export const sayiMetni = v => (v == null || v === "" ? "" : String(v).replace(".", ","));
 
 // Türkçe karakter duyarsız arama karşılaştırması
 export const trLower = s => String(s || "").toLocaleLowerCase("tr-TR");

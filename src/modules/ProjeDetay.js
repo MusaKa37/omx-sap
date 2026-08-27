@@ -368,13 +368,18 @@ function Maliyetler({ projeId, maliyet, yetki, goster, onYenile }) {
   async function kaydet() {
     const tutar = parseSayi(form.tutar);
     if (!tutar) return goster("Tutar girilmeli.", "hata");
+    // Dövizli maliyette kur boş bırakılırsa 1 varsayılıyordu → 5.000 EUR proje
+    // maliyetine 5.000 TL olarak düşüyordu. Kur artık zorunlu (Muhasebe ile aynı kural).
+    const kur = parseSayi(form.kur);
+    if (form.cur !== "TRY" && !(kur > 0))
+      return goster("Dövizli maliyette kur girilmeli.", "hata");
     setKay(true);
     try {
       await api.insert("project_costs", {
         project_id: projeId, tarih: form.tarih, kaynak: form.kaynak,
         kaynak_tablo: "manuel", aciklama: form.aciklama || null,
-        tutar, cur: form.cur, tutar_try: form.cur === "TRY" ? tutar : (tutar * (parseSayi(form.kur) || 1)),
-        kur: form.cur === "TRY" ? null : (parseSayi(form.kur) || null),
+        tutar, cur: form.cur, tutar_try: form.cur === "TRY" ? tutar : tutar * kur,
+        kur: form.cur === "TRY" ? null : kur,
       });
       goster("Maliyet kaydı eklendi.", "basari");
       setForm(null); onYenile();
@@ -485,10 +490,12 @@ function BilgiNotlar({ proje, notlar, profil, yetki, goster, onYenile }) {
       const govde = {
         project_id: proje.id, tarih: form.tarih, tip: form.tip,
         baslik: form.baslik?.trim() || null, icerik: form.icerik.trim(),
-        onemli: !!form.onemli, yazan_id: profil?.id || null,
+        onemli: !!form.onemli,
       };
+      // yazan_id yalnızca yeni kayıtta yazılır; düzenlemede korunur — yoksa
+      // başkasının notunu düzenleyen kişi "yazar" görünüyordu.
       if (form.id) await api.update("project_notes", form.id, govde);
-      else await api.insert("project_notes", govde);
+      else await api.insert("project_notes", { ...govde, yazan_id: profil?.id || null });
       goster(form.id ? "Not güncellendi." : "Not eklendi.", "basari");
       setForm(null); onYenile();
     } catch (e) { goster(e.message, "hata"); } finally { setKay(false); }

@@ -9,7 +9,7 @@ import { api, nextDocNo, logAudit } from "../services/api";
 import { T, DURUM_ETIKET } from "../ui/theme";
 import { Kart, Baslik, Btn, Rozet, Tablo, Modal, Alan, Giris, Metin, Secim, Satir,
          Arama, Olcum, Bos, OnayModal, SecimAra,
-         fmtSayi, fmtTarih, parseSayi, bugun, eslesir } from "../ui/kit";
+         fmtSayi, fmtTarih, parseSayi, sayiMetni, bugun, eslesir } from "../ui/kit";
 
 const BOM_DURUM = [["taslak", "Taslak"], ["onayli", "Onaylı"], ["pasif", "Pasif"]];
 
@@ -77,10 +77,12 @@ export default function Bom({ profil, yetkiVar, goster }) {
   const agac = useMemo(() => {
     if (!secili) return [];
     const kendi = satirlar.filter(l => l.bom_id === secili.id);
-    const cocuk = ust => kendi
-      .filter(l => (l.parent_line_id || null) === (ust || null))
-      .map(l => ({ ...l, cocuklar: cocuk(l.id) }));
-    return cocuk(null);
+    // Ziyaret kümesi: parent_line_id verisinde döngü varsa (SQL/içe aktarma ile
+    // oluşabilir) sonsuz özyineleme sayfayı çökertiyordu.
+    const cocuk = (ust, gorulen) => kendi
+      .filter(l => (l.parent_line_id || null) === (ust || null) && !gorulen.has(l.id))
+      .map(l => ({ ...l, cocuklar: cocuk(l.id, new Set([...gorulen, l.id])) }));
+    return cocuk(null, new Set());
   }, [satirlar, secili]);
 
   // Ağacı patlatıp yaprak malzeme ihtiyacını toplar (üst miktar × alt miktar)
@@ -163,8 +165,18 @@ export default function Bom({ profil, yetkiVar, goster }) {
   async function revizyonAl(b) {
     setKay(true);
     try {
-      const harf = String(b.revizyon || "Rev.A").match(/([A-Z])\s*$/i)?.[1] || "A";
-      const yeniHarf = String.fromCharCode(harf.toUpperCase().charCodeAt(0) + 1);
+      // Revizyon harfi: A→B→…→Z→AA→AB… (eski kod Z'den sonra "[" üretiyordu)
+      const eskiEk = String(b.revizyon || "Rev.A").match(/Rev\.([A-Z]+)/i)?.[1]?.toUpperCase() || "A";
+      const artir = h => {
+        const d = h.split("");
+        let i = d.length - 1;
+        while (i >= 0) {
+          if (d[i] !== "Z") { d[i] = String.fromCharCode(d[i].charCodeAt(0) + 1); return d.join(""); }
+          d[i] = "A"; i -= 1;
+        }
+        return "A" + d.join("");
+      };
+      const yeniHarf = artir(eskiEk);
       const yeniBom = await api.insert("boms", {
         kod: b.kod, ad: b.ad, material_id: b.material_id, project_id: b.project_id,
         revizyon: `Rev.${yeniHarf}`, durum: "taslak",
@@ -174,8 +186,26 @@ export default function Bom({ profil, yetkiVar, goster }) {
 
       const eski = satirlar.filter(l => l.bom_id === b.id);
       const idHarita = {};
-      // Seviye sırasıyla kopyala ki üst kalem her zaman önce oluşsun
-      for (const l of [...eski].sort((x, y) => (x.seviye || 1) - (y.seviye || 1))) {
+      // Üst kalem her zaman çocuğundan ÖNCE kopyalanmalı. Yalnız seviye sırası,
+      // bozuk veride (üst ile çocuk aynı seviyedeyse) bağı sessizce koparıyordu;
+      // topolojik sıra kullanılır: ebeveyni kopyalanmamış satır sona bırakılır.
+      const sirali = [];
+      {
+        const kalan = [...eski].sort((x, y) => (x.seviye || 1) - (y.seviye || 1));
+        const eklendi = new Set();
+        let onceki = -1;
+        while (kalan.length && kalan.length !== onceki) {
+          onceki = kalan.length;
+          for (let i = 0; i < kalan.length; ) {
+            const l = kalan[i];
+            if (!l.parent_line_id || eklendi.has(l.parent_line_id)) {
+              sirali.push(l); eklendi.add(l.id); kalan.splice(i, 1);
+            } else i += 1;
+          }
+        }
+        if (kalan.length) throw new Error("Ürün ağacında döngüsel/eksik üst kalem bağı var; revizyon alınamadı.");
+      }
+      for (const l of sirali) {
         const yeni = await api.insert("bom_lines", {
           bom_id: yeniBom.id,
           parent_line_id: l.parent_line_id ? (idHarita[l.parent_line_id] || null) : null,
@@ -297,7 +327,8 @@ export default function Bom({ profil, yetkiVar, goster }) {
                   sira: (p.cocuklar?.length || 0) + 1, material_id: "", serbest_aciklama: "",
                   miktar: "1", fire_yuzde: "", alternatif_material_id: "", etiket: "", notlar: "" })}
                 onDuzenle={l => setSatirForm({ ...l, material_id: l.material_id || "",
-                  alternatif_material_id: l.alternatif_material_id || "", miktar: String(l.miktar ?? "") })}
+                  alternatif_material_id: l.alternatif_material_id || "",
+                  miktar: sayiMetni(l.miktar), fire_yuzde: sayiMetni(l.fire_yuzde) })}
                 onSil={l => setSil({ tablo: "bom_lines", id: l.id, ad: mlzMap[l.material_id]?.malzeme_adi || l.serbest_aciklama })} />
             ))}
           </Kart>

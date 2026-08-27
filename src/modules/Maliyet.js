@@ -26,7 +26,11 @@ const SIRALAMA = [
   ["maliyet", "Maliyet (çoktan aza)"], ["termin", "Termine göre"],
 ];
 
-export default function Maliyet({ goster }) {
+export default function Maliyet({ goster, yetkiVar }) {
+  // v_project_summary'nin gelir tarafı (transactions + exchange_rates) muhasebe
+  // görüntüleme yetkisi ister; yetkisiz kullanıcıda RLS bu alt sorguları boş
+  // döndürür ve gelir/kâr SESSİZCE yanlış görünür. İlgili kart ve sütunlar gizlenir.
+  const finansGorur = !yetkiVar || yetkiVar("muhasebe");
   const [ozetler, setOzetler]   = useState([]);
   const [projeler, setProjeler] = useState([]);
   const [maliyetler, setMal]    = useState([]);
@@ -143,12 +147,12 @@ export default function Maliyet({ goster }) {
           renk={genel.butce > 0 && genel.maliyet > genel.butce ? T.renk.hata : T.renk.metin}
           zemin={genel.butce > 0 && genel.maliyet > genel.butce ? T.renk.hataAcik : "#f1f5f9"}
           alt={genel.butce > 0 ? `bütçenin %${Math.round(genel.maliyet / genel.butce * 100)}'i` : "bütçe girilmemiş"} />
-        <Olcum etiket="Faturalanan" deger={fmtPara(genel.gelir)} ikon="₺"
-          renk={T.renk.basari} zemin={T.renk.basariAcik} />
-        <Olcum etiket="Net Kâr" deger={fmtPara(genel.kar)} ikon="↗"
+        {finansGorur && <Olcum etiket="Faturalanan" deger={fmtPara(genel.gelir)} ikon="₺"
+          renk={T.renk.basari} zemin={T.renk.basariAcik} />}
+        {finansGorur && <Olcum etiket="Net Kâr" deger={fmtPara(genel.kar)} ikon="↗"
           renk={genel.kar >= 0 ? T.renk.basari : T.renk.hata}
           zemin={genel.kar >= 0 ? T.renk.basariAcik : T.renk.hataAcik}
-          alt={genel.gelir > 0 ? `marj %${(genel.kar / genel.gelir * 100).toFixed(1)}` : "henüz fatura yok"} />
+          alt={genel.gelir > 0 ? `marj %${(genel.kar / genel.gelir * 100).toFixed(1)}` : "henüz fatura yok"} />}
         <Olcum etiket="Bütçe Aşan Proje" deger={asanlar.length} ikon="⚠"
           renk={asanlar.length ? T.renk.hata : T.renk.basari}
           zemin={asanlar.length ? T.renk.hataAcik : T.renk.basariAcik}
@@ -228,6 +232,7 @@ export default function Maliyet({ goster }) {
             render: r => r.butce
               ? <Ilerleme yuzde={r.kullanim} renk={r.kullanim > 100 ? T.renk.hata : undefined} />
               : <span style={{ color: T.renk.metinPasif, fontSize: 12 }}>—</span> },
+          ...(finansGorur ? [
           { anahtar: "faturalanan_gelir", baslik: "Faturalanan", hizala: "right", genislik: 130,
             render: r => fmtPara(r.faturalanan_gelir) },
           { anahtar: "net_kar", baslik: "Net Kâr", hizala: "right", genislik: 130,
@@ -238,6 +243,7 @@ export default function Maliyet({ goster }) {
               ? <span style={{ color: T.renk.metinPasif }}>—</span>
               : <span style={{ fontWeight: 650, color: r.kar_marji_yuzde >= 0 ? T.renk.basari : T.renk.hata }}>
                   %{fmtSayi(r.kar_marji_yuzde, 1)}</span> },
+          ] : []),
         ]} />
 
       {/* ── PROJE MALİYET DETAYI ── */}

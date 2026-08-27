@@ -9,7 +9,7 @@ import { api, nextDocNo, logAudit } from "../services/api";
 import { T, DURUM_ETIKET } from "../ui/theme";
 import { Kart, Baslik, Btn, Rozet, Tablo, Modal, Alan, Giris, Metin, Secim, Satir,
          Arama, Sekmeler, Olcum, Bos, OnayModal, SecimAra,
-         fmtPara, fmtSayi, fmtTarih, parseSayi, bugun, eslesir } from "../ui/kit";
+         fmtPara, fmtSayi, fmtTarih, parseSayi, sayiMetni, bugun, eslesir } from "../ui/kit";
 
 const TALEP_DURUM = ["taslak", "onay_bekliyor", "onaylandi", "reddedildi", "siparise_donustu", "kapandi"]
   .map(d => [d, DURUM_ETIKET[d] || d]);
@@ -107,7 +107,7 @@ export default function SatinAlma({ profil, yetkiVar, goster }) {
   // ── Talep ─────────────────────────────────────────────────────────────────
   async function talepAc() {
     let no = "";
-    try { no = await nextDocNo("TLP"); } catch { no = `TLP-${new Date().getFullYear()}-`; }
+    try { no = await nextDocNo("TLP"); } catch { no = `TLP-${Date.now()}`; }
     setTalepForm({
       talep_no: no, project_id: "", ihtiyac_tarihi: "", aciliyet: "normal",
       durum: "taslak", aciklama: "",
@@ -130,7 +130,8 @@ export default function SatinAlma({ profil, yetkiVar, goster }) {
       };
       let id = f.id;
       if (id) {
-        await api.update("purchase_requests", id, govde);
+        // Önce satırlar, en son başlık — satır işlemi hata verirse başlık eski
+        // hâlinde kalır (yarım güncelleme deseni düzeltildi).
         await api.remove("purchase_request_lines", `request_id=eq.${id}`);
       } else {
         const yeni = await api.insert("purchase_requests", govde);
@@ -147,6 +148,7 @@ export default function SatinAlma({ profil, yetkiVar, goster }) {
           ihtiyac_tarihi: f.ihtiyac_tarihi || null, durum: f.durum, notlar: k.notlar || null,
         };
       }));
+      if (f.id) await api.update("purchase_requests", id, govde); // başlık en son
       logAudit({ tablo: "purchase_requests", kayit_id: id, islem: f.id ? "update" : "insert", aciklama: govde.talep_no });
       goster(f.id ? "Talep güncellendi." : "Talep oluşturuldu.", "basari");
       setTalepForm(null); yukle();
@@ -166,7 +168,7 @@ export default function SatinAlma({ profil, yetkiVar, goster }) {
   // ── Sipariş ───────────────────────────────────────────────────────────────
   async function siparisAc(talepten) {
     let no = "";
-    try { no = await nextDocNo("SPR"); } catch { no = `SPR-${new Date().getFullYear()}-`; }
+    try { no = await nextDocNo("SPR"); } catch { no = `SPR-${Date.now()}`; }
     setSipForm({
       siparis_no: no,
       tedarikci_id: "", project_id: talepten?.project_id || "",
@@ -189,7 +191,7 @@ export default function SatinAlma({ profil, yetkiVar, goster }) {
     let a = 0, k = 0;
     sipForm.kalemler.forEach(l => {
       const t = (parseSayi(l.miktar) || 0) * (parseSayi(l.birim_fiyat) || 0);
-      a += t; k += t * (Number(l.kdv_yuzde) || 0) / 100;
+      a += t; k += t * (parseSayi(l.kdv_yuzde) || 0) / 100;
     });
     const ek = (parseSayi(sipForm.nakliye_bedeli) || 0) + (parseSayi(sipForm.gumruk_bedeli) || 0);
     return { ara: a + ek, kdv: k, genel: a + ek + k };
@@ -220,7 +222,20 @@ export default function SatinAlma({ profil, yetkiVar, goster }) {
       };
       let id = f.id;
       if (id) {
-        await api.update("purchase_orders", id, govde);
+        // Mal kabul görmüş siparişin kalemleri "sil→yeniden ekle" ile YAZILAMAZ:
+        // goods_receipt_lines FK'sı silmeyi engeller ve akış yarıda kalıp başlıkta
+        // yeni, satırlarda eski değer bırakıyordu. Ayrıca satırlar yeni id alınca
+        // mal kabul izlenebilirliği kopar. Böyle siparişte yalnız başlık güncellenir.
+        const teslimli = (f.kalemler || []).some(k => Number(k.teslim_alinan) > 0);
+        if (teslimli) {
+          await api.update("purchase_orders", id, govde);
+          logAudit({ tablo: "purchase_orders", kayit_id: id, islem: "update", aciklama: govde.siparis_no });
+          goster("Mal kabul görmüş siparişte kalemler değiştirilemez; başlık bilgileri güncellendi.", "basari");
+          setSipForm(null); yukle();
+          return;
+        }
+        // Önce satırlar, en son başlık: satır işlemi hata verirse başlık eski
+        // hâlinde kalır, kayıt tutarsızlaşmaz.
         await api.remove("purchase_order_lines", `order_id=eq.${id}`);
       } else {
         const yeni = await api.insert("purchase_orders", govde);
@@ -233,11 +248,12 @@ export default function SatinAlma({ profil, yetkiVar, goster }) {
           material_id: k.material_id ? Number(k.material_id) : null,
           serbest_aciklama: k.serbest_aciklama || null,
           miktar, birim: k.material_id ? (mlzMap[k.material_id]?.birim || "Adet") : "Adet",
-          birim_fiyat: fiyat, kdv_yuzde: Number(k.kdv_yuzde) || 0,
+          birim_fiyat: fiyat, kdv_yuzde: parseSayi(k.kdv_yuzde) || 0,
           toplam: miktar * fiyat, teslim_alinan: k.teslim_alinan || 0,
           termin: f.termin || null, notlar: k.notlar || null,
         };
       }));
+      if (f.id) await api.update("purchase_orders", id, govde); // başlık en son
       if (f.request_id) await api.update("purchase_requests", f.request_id, { durum: "siparise_donustu" }).catch(() => {});
       logAudit({ tablo: "purchase_orders", kayit_id: id, islem: f.id ? "update" : "insert", aciklama: govde.siparis_no });
       goster(f.id ? "Sipariş güncellendi." : "Sipariş oluşturuldu.", "basari");
@@ -383,10 +399,10 @@ export default function SatinAlma({ profil, yetkiVar, goster }) {
         <Tablo yukleniyor={yuk} veri={gorunenSip}
           onSatirTikla={duzenleyebilir ? s => setSipForm({
             ...s, tedarikci_id: s.tedarikci_id || "", project_id: s.project_id || "",
-            kur: s.kur ?? "", nakliye_bedeli: s.nakliye_bedeli ?? "", gumruk_bedeli: s.gumruk_bedeli ?? "",
+            kur: sayiMetni(s.kur), nakliye_bedeli: sayiMetni(s.nakliye_bedeli), gumruk_bedeli: sayiMetni(s.gumruk_bedeli),
             kalemler: s.kalemler.length ? s.kalemler.map(k => ({
-              ...k, material_id: k.material_id || "", miktar: String(k.miktar ?? ""),
-              birim_fiyat: String(k.birim_fiyat ?? ""),
+              ...k, material_id: k.material_id || "", miktar: sayiMetni(k.miktar),
+              birim_fiyat: sayiMetni(k.birim_fiyat),
             })) : [{ material_id: "", serbest_aciklama: "", miktar: "", birim_fiyat: "", kdv_yuzde: 20 }],
           }) : undefined}
           bosMesaj="Sipariş yok"
@@ -751,7 +767,8 @@ export default function SatinAlma({ profil, yetkiVar, goster }) {
             <div style={{ fontSize: 12.5, color: T.renk.metinPasif, background: "#f8fafc",
               padding: "10px 13px", borderRadius: 8 }}>
               Kaydedilince stok kartı olan kalemler seçilen depoya giriş yapar
-              {kabulForm.order.project_id ? " ve proje maliyetine yazılır" : ""}. Sipariş durumu
+              {kabulForm.order.project_id
+                ? "; malzeme maliyeti projeye depodan çıkış/sarf yapıldığında düşer" : ""}. Sipariş durumu
               teslim miktarına göre otomatik güncellenir.
             </div>
           </div>

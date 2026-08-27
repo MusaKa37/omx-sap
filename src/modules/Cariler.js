@@ -7,7 +7,7 @@ import { api, nextDocNo, logAudit } from "../services/api";
 import { T } from "../ui/theme";
 import { Kart, Baslik, Btn, Rozet, Tablo, Modal, Alan, Giris, Metin, Secim, Satir,
          Arama, Sekmeler, Olcum, OnayModal,
-         fmtPara, fmtTarih, parseSayi, eslesir } from "../ui/kit";
+         fmtPara, fmtTarih, parseSayi, sayiMetni, eslesir } from "../ui/kit";
 
 const TIPLER = [["musteri", "Müşteri"], ["tedarikci", "Tedarikçi"],
                 ["taseron", "Taşeron"], ["her_ikisi", "Müşteri + Tedarikçi"]];
@@ -188,7 +188,7 @@ export default function Cariler({ yetkiVar, goster }) {
           {silebilir && <Btn tur="tehlike" onClick={() => { setSil(detay); setDetay(null); }}>Sil</Btn>}
           <Btn onClick={() => setDetay(null)}>Kapat</Btn>
           {duzenleyebilir && <Btn tur="birincil"
-            onClick={() => { setForm({ ...BOS, ...detay, risk_limiti: detay.risk_limiti ?? "" }); setDetay(null); }}>
+            onClick={() => { setForm({ ...BOS, ...detay, risk_limiti: sayiMetni(detay.risk_limiti) }); setDetay(null); }}>
             Düzenle</Btn>}
         </>}>
         {detay && (

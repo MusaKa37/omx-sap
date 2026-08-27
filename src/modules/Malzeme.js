@@ -7,7 +7,7 @@ import { api, logAudit } from "../services/api";
 import { T } from "../ui/theme";
 import { Kart, Baslik, Btn, Rozet, Tablo, Modal, Alan, Giris, Metin, Secim, Satir,
          Arama, Sekmeler, Olcum, OnayModal,
-         fmtPara, fmtSayi, parseSayi, eslesir } from "../ui/kit";
+         fmtPara, fmtSayi, parseSayi, sayiMetni, eslesir } from "../ui/kit";
 
 const TIPLER = [["hammadde", "Hammadde"], ["yari_mamul", "Yarı Mamul"], ["ticari_mal", "Ticari Mal"],
                 ["sarf", "Sarf Malzeme"], ["hizmet", "Hizmet"], ["ekipman", "Ekipman"]];
@@ -55,8 +55,12 @@ export default function Malzeme({ yetkiVar, goster }) {
       f.forEach(r => {
         if (r.fiyat == null) return;
         const mevcut = fh[r.material_id];
-        // En düşük tedarikçi fiyatı listede gösterilir (aynı para birimi içinde)
-        if (!mevcut || Number(r.fiyat) < Number(mevcut.fiyat)) fh[r.material_id] = r;
+        // En düşük tedarikçi fiyatı YALNIZCA aynı para birimi içinde kıyaslanır;
+        // farklı para birimlerinde ham sayı karşılaştırması (5 EUR < 100 TL) yanıltıcıydı.
+        // Farklı para birimli fiyatlar varsa ilk görülen para birimi esas alınır.
+        if (!mevcut) { fh[r.material_id] = r; return; }
+        if ((r.cur || "TRY") === (mevcut.cur || "TRY")
+            && Number(r.fiyat) < Number(mevcut.fiyat)) fh[r.material_id] = r;
       });
       setFiyat(fh);
     } catch (e) { goster("Malzeme listesi yüklenemedi: " + e.message, "hata"); }
@@ -213,7 +217,9 @@ export default function Malzeme({ yetkiVar, goster }) {
         altBar={<>
           <Btn onClick={() => setDetay(null)}>Kapat</Btn>
           {duzenleyebilir && <Btn tur="birincil"
-            onClick={() => { setForm({ ...BOS, ...detay, category_id: detay.category_id || "" }); setDetay(null); }}>Düzenle</Btn>}
+            onClick={() => { setForm({ ...BOS, ...detay, category_id: detay.category_id || "",
+              min_stok: sayiMetni(detay.min_stok), max_stok: sayiMetni(detay.max_stok),
+              kritik_stok: sayiMetni(detay.kritik_stok) }); setDetay(null); }}>Düzenle</Btn>}
         </>}>
         {detay && (
           <div>

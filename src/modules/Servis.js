@@ -9,7 +9,7 @@ import { api, nextDocNo, logAudit } from "../services/api";
 import { T, DURUM_ETIKET } from "../ui/theme";
 import { Kart, Baslik, Btn, Rozet, Tablo, Modal, Alan, Giris, Metin, Secim, Satir,
          Arama, Sekmeler, Olcum, OnayModal, SecimAra,
-         fmtPara, fmtTarih, parseSayi, bugun, eslesir } from "../ui/kit";
+         fmtPara, fmtTarih, parseSayi, sayiMetni, bugun, eslesir } from "../ui/kit";
 
 const TIP = [
   ["ariza", "Arıza"], ["periyodik_bakim", "Periyodik Bakım"], ["revizyon", "Revizyon"],
@@ -138,13 +138,17 @@ export default function Servis({ profil, yetkiVar, goster }) {
       };
       let id = f.id;
       if (id) {
-        await api.update("service_orders", id, govde);
-        await api.remove("service_order_parts", `service_order_id=eq.${id}`);
+        // Stoktan düşülmüş parçalar depo hareketiyle eşleşir; silinip yeniden
+        // eklenirse yeni id alır, izlenebilirlik kopar. Onlar olduğu gibi korunur,
+        // yalnızca düşülmemiş satırlar yeniden yazılır. Başlık EN SON güncellenir
+        // ki satır işlemi hata verirse kayıt tutarsız kalmasın.
+        await api.remove("service_order_parts", `service_order_id=eq.${id}&stok_dusuldu=eq.false`);
       } else {
         const yeni = await api.insert("service_orders", govde);
         id = yeni?.id;
       }
-      const dolu = (f.parcalar || []).filter(p => p.material_id || p.serbest_aciklama?.trim());
+      const dolu = (f.parcalar || [])
+        .filter(p => !p.stok_dusuldu && (p.material_id || p.serbest_aciklama?.trim()));
       if (dolu.length) {
         await api.insertMany("service_order_parts", dolu.map(p => ({
           service_order_id: id,
@@ -154,9 +158,10 @@ export default function Servis({ profil, yetkiVar, goster }) {
           birim_fiyat: parseSayi(p.birim_fiyat) || 0,
           cur: p.cur || "TRY",
           warehouse_id: p.warehouse_id ? Number(p.warehouse_id) : null,
-          stok_dusuldu: !!p.stok_dusuldu,
+          stok_dusuldu: false,
         })));
       }
+      if (f.id) await api.update("service_orders", id, govde); // başlık en son
       logAudit({ tablo: "service_orders", kayit_id: id, islem: f.id ? "update" : "insert", aciklama: govde.is_emri_no });
       goster(f.id ? "İş emri güncellendi." : "İş emri oluşturuldu.", "basari");
       setForm(null); yukle();
@@ -165,6 +170,10 @@ export default function Servis({ profil, yetkiVar, goster }) {
 
   // Kullanılan parçaları depodan düşer
   async function stoktanDus(s) {
+    // stock_moves RLS'i depo.ekle ister; servis.ekle yetmez — buton da gizlenir
+    // ama korumayı burada da tekrarla (403'te yarım kalmış işlem olmasın).
+    if (!yetkiVar("depo", "ekle"))
+      return goster("Stok düşümü için depo modülünde ekleme yetkisi gerekir.", "hata");
     const dusulecek = s.parcalar.filter(p => p.material_id && !p.stok_dusuldu);
     if (!dusulecek.length) return goster("Düşülecek parça yok.", "hata");
     const depoSuz = dusulecek.find(p => !p.warehouse_id);
@@ -244,10 +253,10 @@ export default function Servis({ profil, yetkiVar, goster }) {
         onSatirTikla={duzenleyebilir ? s => setForm({
           ...BOS, ...s, musteri_id: s.musteri_id || "", equipment_id: s.equipment_id || "",
           project_id: s.project_id || "", teknisyen_id: s.teknisyen_id || "",
-          toplam_saat: String(s.toplam_saat ?? ""),
+          toplam_saat: sayiMetni(s.toplam_saat),
           parcalar: (s.parcalar || []).map(p => ({ ...p, material_id: p.material_id || "",
-            warehouse_id: p.warehouse_id || "", miktar: String(p.miktar ?? ""),
-            birim_fiyat: String(p.birim_fiyat ?? "") })),
+            warehouse_id: p.warehouse_id || "", miktar: sayiMetni(p.miktar),
+            birim_fiyat: sayiMetni(p.birim_fiyat) })),
         }) : undefined}
         bosMesaj={ara || fTip ? "Filtreye uyan iş emri yok" : "İş emri yok"}
         sutunlar={[
@@ -295,7 +304,7 @@ export default function Servis({ profil, yetkiVar, goster }) {
           { anahtar: "islem", baslik: "", genislik: 120, hizala: "center",
             render: r => {
               const bekleyen = (r.parcalar || []).filter(p => p.material_id && !p.stok_dusuldu).length;
-              if (!bekleyen || !ekleyebilir) return null;
+              if (!bekleyen || !ekleyebilir || !yetkiVar("depo", "ekle")) return null;
               return (
                 <div onClick={e => e.stopPropagation()}>
                   <Btn boyut="sm" tur="basari" onClick={() => setStokOnay(r)}>Stoktan Düş</Btn>

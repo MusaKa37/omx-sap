@@ -217,13 +217,15 @@ export default function Projeler({ profil, yetkiVar, goster }) {
             render: r => <Ilerleme yuzde={r.ilerleme_yuzde} /> },
           { anahtar: "sozlesme_bedeli", baslik: "Sözleşme", hizala: "right", genislik: 130,
             render: r => fmtPara(r.sozlesme_bedeli, r.cur) },
-          { anahtar: "kar", baslik: "Net Kâr", hizala: "right", genislik: 122,
+          // Muhasebe görüntüleme yetkisi yoksa v_project_summary'nin gelir tarafı
+          // RLS ile boş döner ve kâr SESSİZCE yanlış (hep negatif) görünür — sütun gizlenir.
+          ...(yetkiVar("muhasebe") ? [{ anahtar: "kar", baslik: "Net Kâr", hizala: "right", genislik: 122,
             render: r => {
               const o = ozetler[r.id];
               if (!o) return "—";
               return <span style={{ color: Number(o.net_kar) >= 0 ? T.renk.basari : T.renk.hata, fontWeight: 650 }}>
                 {fmtPara(o.net_kar)}</span>;
-            }},
+            }}] : []),
           ...(silebilir ? [{ anahtar: "islem", baslik: "", genislik: 46, hizala: "center",
             render: r => <button title="Sil" onClick={e => { e.stopPropagation(); setSil(r); }}
               style={{ border: "none", background: "none", cursor: "pointer", color: T.renk.hata, fontSize: 15 }}>×</button> }] : []),

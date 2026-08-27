@@ -6,10 +6,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { api, nextDocNo, logAudit } from "../services/api";
-import { T, DURUM_ETIKET } from "../ui/theme";
+import { T, DURUM_ETIKET, PROJE_TIPI_ETIKET } from "../ui/theme";
 import { Kart, Baslik, Btn, Rozet, Tablo, Modal, Alan, Giris, Metin, Secim, Satir,
          Arama, Olcum, OnayModal, SecimAra,
-         fmtPara, fmtSayi, fmtTarih, parseSayi, bugun, eslesir } from "../ui/kit";
+         fmtPara, fmtSayi, fmtTarih, parseSayi, sayiMetni, bugun, eslesir } from "../ui/kit";
 
 const DURUM = ["hazirlaniyor", "gonderildi", "revize", "kazanildi", "kaybedildi", "iptal"]
   .map(d => [d, DURUM_ETIKET[d] || d]);
@@ -94,7 +94,7 @@ export default function Teklif({ profil, yetkiVar, goster }) {
 
   async function yeniAc() {
     let no = "";
-    try { no = await nextDocNo("TKF"); } catch { no = `TKF-${new Date().getFullYear()}-`; }
+    try { no = await nextDocNo("TKF"); } catch { no = `TKF-${Date.now()}`; }
     const gecerlilik = new Date(); gecerlilik.setDate(gecerlilik.getDate() + 30);
     setForm({
       teklif_no: no, musteri_id: "", tarih: bugun(),
@@ -126,7 +126,8 @@ export default function Teklif({ profil, yetkiVar, goster }) {
       };
       let id = f.id;
       if (id) {
-        await api.update("quotes", id, govde);
+        // Önce satırlar, en son başlık — satır işlemi hata verirse başlık eski
+        // hâlinde kalır (yarım güncelleme deseni düzeltildi).
         await api.remove("quote_lines", `quote_id=eq.${id}`);
       } else {
         const y = await api.insert("quotes", govde);
@@ -142,10 +143,11 @@ export default function Teklif({ profil, yetkiVar, goster }) {
           miktar: m, birim: k.material_id ? (mlzMap[k.material_id]?.birim || "Adet") : (k.birim || "Adet"),
           birim_fiyat: fi, birim_maliyet: parseSayi(k.birim_maliyet) || 0,
           iskonto_yuzde: parseSayi(k.iskonto_yuzde) || 0,
-          kdv_yuzde: Number(k.kdv_yuzde) || 0,
+          kdv_yuzde: parseSayi(k.kdv_yuzde) || 0,
           toplam: brut - brut * (parseSayi(k.iskonto_yuzde) || 0) / 100,
         };
       }));
+      if (f.id) await api.update("quotes", id, govde); // başlık en son
       logAudit({ tablo: "quotes", kayit_id: id, islem: f.id ? "update" : "insert", aciklama: govde.teklif_no });
       goster(f.id ? "Teklif güncellendi." : "Teklif oluşturuldu.", "basari");
       setForm(null); yukle();
@@ -158,15 +160,19 @@ export default function Teklif({ profil, yetkiVar, goster }) {
     try {
       let kod = "";
       try { kod = await nextDocNo("OMX"); } catch { kod = `OMX-${Date.now()}`; }
+      // Bütçe alanları TL bazındadır (project_costs.tutar_try ile kıyaslanır);
+      // teklif dövizli ise tahmini maliyet sözleşme kuru ile TL'ye çevrilir.
+      const tlKur = q.cur === "TRY" ? 1 : (Number(q.kur) || 1);
+      const maliyetTl = Number(q.tahmini_maliyet || 0) * tlKur;
       const proje = await api.insert("projects", {
         proje_kodu: kod,
         proje_adi: q.notlar?.split("\n")[0]?.slice(0, 80) || `${q.musteri?.unvan || "Proje"} · ${q.teklif_no}`,
-        musteri_id: q.musteri_id, tip: q.proje_tipi || "plc_hmi", durum: "onay_bekliyor",
+        musteri_id: q.musteri_id, tip: q.tip || "plc_hmi", durum: "onay_bekliyor",
         sorumlu_id: profil?.id || null, baslangic: bugun(),
         sozlesme_bedeli: q.genel_toplam, cur: q.cur, sozlesme_kur: q.kur,
-        butce_malzeme: Number(q.tahmini_maliyet || 0) * 0.6,
-        butce_iscilik: Number(q.tahmini_maliyet || 0) * 0.3,
-        butce_diger: Number(q.tahmini_maliyet || 0) * 0.1,
+        butce_malzeme: maliyetTl * 0.6,
+        butce_iscilik: maliyetTl * 0.3,
+        butce_diger: maliyetTl * 0.1,
         aciklama: `${q.teklif_no} numaralı tekliften oluşturuldu.\n${q.notlar || ""}`.trim(),
         created_by: profil?.id || null,
       });
@@ -226,11 +232,11 @@ export default function Teklif({ profil, yetkiVar, goster }) {
 
       <Tablo yukleniyor={yuk} veri={gorunen}
         onSatirTikla={duzenleyebilir ? q => setForm({
-          ...q, musteri_id: q.musteri_id || "", kur: String(q.kur ?? ""),
+          ...q, musteri_id: q.musteri_id || "", kur: sayiMetni(q.kur),
           kalemler: q.kalemler.length ? q.kalemler.map(k => ({ ...k,
-            material_id: k.material_id || "", miktar: String(k.miktar ?? ""),
-            birim_fiyat: String(k.birim_fiyat ?? ""), birim_maliyet: String(k.birim_maliyet ?? ""),
-            iskonto_yuzde: String(k.iskonto_yuzde ?? "") })) : [{ ...BOS_KALEM }],
+            material_id: k.material_id || "", miktar: sayiMetni(k.miktar),
+            birim_fiyat: sayiMetni(k.birim_fiyat), birim_maliyet: sayiMetni(k.birim_maliyet),
+            iskonto_yuzde: sayiMetni(k.iskonto_yuzde) })) : [{ ...BOS_KALEM }],
         }) : undefined}
         bosMesaj={ara || fDurum ? "Filtreye uyan teklif yok" : "Henüz teklif yok"}
         sutunlar={[
@@ -481,9 +487,14 @@ export default function Teklif({ profil, yetkiVar, goster }) {
               müşteri, sözleşme bedeli ({fmtPara(projeOnay.genel_toplam, projeOnay.cur)}) ve
               kur bilgisiyle oluşturulur.
             </p>
+            <Alan etiket="Proje Tipi">
+              <Secim value={projeOnay.tip || "plc_hmi"} bos={false}
+                onChange={e => setProjeOnay(o => ({ ...o, tip: e.target.value }))}
+                secenekler={Object.entries(PROJE_TIPI_ETIKET)} />
+            </Alan>
             <div style={{ background: "#f8fafc", borderRadius: 9, padding: "12px 15px", fontSize: 12.5 }}>
               Bütçe, tahmini maliyet ({fmtPara(projeOnay.tahmini_maliyet, projeOnay.cur)}) üzerinden
-              malzeme %60 · işçilik %30 · diğer %10 olarak ön doldurulur.
+              malzeme %60 · işçilik %30 · diğer %10 olarak TL bazında ön doldurulur.
               Projeler ekranından gerçek dağılımla düzeltmeyi unutmayın.
             </div>
           </div>

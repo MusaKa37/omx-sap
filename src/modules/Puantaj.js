@@ -62,7 +62,9 @@ export default function Puantaj({ profil, yetkiVar, goster }) {
   useEffect(() => { yukle(); }, [yukle]);
 
   const kulMap = useMemo(() => Object.fromEntries(kullanicilar.map(u => [u.id, u])), [kullanicilar]);
-  const saatlikMaliyet = kulMap[kendiId]?.saatlik_maliyet || 0;
+  // app_users listesi geçici bir hatayla boş dönerse maliyet 0 olarak DONUYORDU
+  // (trigger insert anındaki değeri kullanır) — profil yedeği eklendi.
+  const saatlikMaliyet = kulMap[kendiId]?.saatlik_maliyet ?? profil?.saatlik_maliyet ?? 0;
 
   const projeSecenek = useMemo(() => projeler
     .filter(p => !["iptal"].includes(p.durum))
@@ -92,6 +94,10 @@ export default function Puantaj({ profil, yetkiVar, goster }) {
   async function saatKaydet(project_id, faaliyet, tarih, deger) {
     const saat = parseSayi(deger);
     const mevcut = hucre(project_id, faaliyet, tarih);
+    // Geçersiz girdi ("-", harf) kaydı SİLMEMELİ — yalnızca gerçekten boşaltılan
+    // hücre silme sayılır; NaN girdide uyar ve dokunma.
+    if (String(deger).trim() !== "" && Number.isNaN(saat))
+      return goster("Geçersiz saat değeri.", "hata");
     if (mevcut && (!saat || saat <= 0)) {
       try { await api.remove("timesheets", mevcut.id); yukle(); }
       catch (e) { goster(e.message, "hata"); }
@@ -103,7 +109,11 @@ export default function Puantaj({ profil, yetkiVar, goster }) {
     if (mevcut?.onay_durum === "onaylandi")
       return goster("Onaylanmış kayıt değiştirilemez. Yöneticinizden onayı geri almasını isteyin.", "hata");
     try {
-      if (mevcut) await api.update("timesheets", mevcut.id, { saat });
+      // Reddedilmiş kayıt düzeltilince onay kuyruğuna geri dönmeli; yoksa
+      // "bekleyenler" listesine hiç düşmez ve maliyet sonsuza dek işlenmez.
+      if (mevcut) await api.update("timesheets", mevcut.id,
+        mevcut.onay_durum === "reddedildi"
+          ? { saat, onay_durum: "bekliyor", onaylayan_id: null } : { saat });
       else await api.insert("timesheets", {
         user_id: kendiId, project_id: Number(project_id), tarih, saat,
         faaliyet, lokasyon: "ofis", onay_durum: "bekliyor",
@@ -124,7 +134,9 @@ export default function Puantaj({ profil, yetkiVar, goster }) {
         konaklama: parseSayi(f.konaklama) || 0,
         yol: parseSayi(f.yol) || 0,
       };
-      if (f.id) await api.update("timesheets", f.id, govde);
+      if (f.id) await api.update("timesheets", f.id,
+        f.onay_durum === "reddedildi"
+          ? { ...govde, onay_durum: "bekliyor", onaylayan_id: null } : govde);
       else await api.insert("timesheets", {
         ...govde, user_id: kendiId, project_id: Number(f.project_id),
         tarih: f.tarih, faaliyet: f.faaliyet, onay_durum: "bekliyor",
@@ -137,9 +149,10 @@ export default function Puantaj({ profil, yetkiVar, goster }) {
 
   async function onayla(k, durum) {
     try {
-      await api.update("timesheets", k.id, {
-        onay_durum: durum, onaylayan_id: profil?.id || null,
-      });
+      // Düz UPDATE, RLS 'duzenle' izni istediğinden (ör. muhasebe rolünde yok)
+      // sessizce 0 satır etkiliyordu; onay artık yalnızca onay alanlarını
+      // değiştiren security definer RPC üzerinden.
+      await api.rpc("puantaj_onayla", { p_id: k.id, p_karar: durum });
       logAudit({ tablo: "timesheets", kayit_id: k.id, islem: "update",
                  aciklama: `${durum} · ${kulMap[k.user_id]?.ad_soyad || ""}` });
       goster(durum === "onaylandi"
@@ -153,7 +166,7 @@ export default function Puantaj({ profil, yetkiVar, goster }) {
     setKay(true);
     try {
       for (const k of liste) {
-        await api.update("timesheets", k.id, { onay_durum: "onaylandi", onaylayan_id: profil?.id || null });
+        await api.rpc("puantaj_onayla", { p_id: k.id, p_karar: "onaylandi" });
       }
       goster(`${liste.length} kayıt onaylandı.`, "basari");
       yukle();
@@ -405,7 +418,9 @@ export default function Puantaj({ profil, yetkiVar, goster }) {
                 }},
               { anahtar: "tutar", baslik: "Maliyet", hizala: "right", genislik: 120,
                 render: r => {
-                  const m = kulMap[r.user_id]?.saatlik_maliyet || r.saatlik_maliyet || 0;
+                  // Projeye işlenecek tutar kayıtta DONMUŞ saatlik_maliyet ile hesaplanır
+                  // (trigger böyle yapar); güncel değeri göstermek yanıltıcıydı.
+                  const m = r.saatlik_maliyet || kulMap[r.user_id]?.saatlik_maliyet || 0;
                   const t = (Number(r.saat || 0) + Number(r.mesai_saat || 0) * 1.5) * m
                     + Number(r.harcirah || 0) + Number(r.konaklama || 0) + Number(r.yol || 0);
                   return <b>{fmtPara(t)}</b>;

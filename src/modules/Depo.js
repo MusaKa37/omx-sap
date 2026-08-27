@@ -99,7 +99,10 @@ export default function Depo({ profil, yetkiVar, goster }) {
     const miktar = parseSayi(f.miktar);
     if (!f.material_id)  return goster("Malzeme seçilmeli.", "hata");
     if (!f.warehouse_id) return goster("Depo seçilmeli.", "hata");
-    if (!miktar || miktar <= 0) return goster("Miktar sıfırdan büyük olmalı.", "hata");
+    // Sayımda miktar "bakiye eşitlenecek değer"dir; 0 geçerlidir (boş raf sayımı).
+    if (f.tip === "sayim") {
+      if (Number.isNaN(miktar) || miktar < 0) return goster("Sayım miktarı 0 veya daha büyük olmalı.", "hata");
+    } else if (!miktar || miktar <= 0) return goster("Miktar sıfırdan büyük olmalı.", "hata");
     if (f.tip === "transfer" && !f.hedef_warehouse_id)
       return goster("Transferde hedef depo zorunlu.", "hata");
     if (f.tip === "transfer" && String(f.hedef_warehouse_id) === String(f.warehouse_id))

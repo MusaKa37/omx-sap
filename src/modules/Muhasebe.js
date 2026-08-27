@@ -9,7 +9,7 @@ import { api, uploadFile, logAudit } from "../services/api";
 import { T, CUR_SEMBOL } from "../ui/theme";
 import { Kart, Baslik, Btn, Rozet, Tablo, Modal, Alan, Giris, Metin, Secim, Satir,
          Arama, Sekmeler, OnayModal, SecimAra,
-         fmtPara, fmtTarih, parseSayi, bugun, eslesir } from "../ui/kit";
+         fmtPara, fmtTarih, parseSayi, sayiMetni, bugun, eslesir } from "../ui/kit";
 
 const PARALAR = ["TRY", "EUR", "USD"];
 const TIP = [["fatura", "Fatura"], ["odeme", "Ödeme"], ["tahsilat", "Tahsilat"],
@@ -100,9 +100,15 @@ export default function Muhasebe({ profil, yetkiVar, goster }) {
     return h;
   }, [donemIslemleri]);
 
+  // Kâr TL bazında hesaplanır: farklı para birimlerindeki ham `tutar` değerleri
+  // toplanamaz (10.000 EUR + 100.000 TL ≠ 110.000 ₺). İşlem anında donmuş
+  // `tutar_try` kullanılır; eski kayıtlarda yoksa kur ile çevrilir.
+  const tlTutar = t => Number(t.tutar_try) ||
+    Number(t.tutar || 0) * ((t.cur || "TRY") === "TRY" ? 1 : (Number(t.kur) || 1));
   const donemKar = useMemo(() => donemIslemleri
     .filter(t => t.tip === "fatura" && t.yon === "satis")
-    .reduce((s, t) => s + (Number(t.tutar || 0) - Number(t.masraf || 0)), 0), [donemIslemleri]);
+    .reduce((s, t) => s + (tlTutar(t) - Number(t.masraf || 0)), 0),
+    [donemIslemleri]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Firma bazlı bakiyeler ─────────────────────────────────────────────────
   const firmaBakiye = useMemo(() => {
@@ -233,7 +239,7 @@ export default function Muhasebe({ profil, yetkiVar, goster }) {
   if (secili) {
     const b = firmaBakiye[secili.id] || {};
     const kar = seciliIslemler.filter(t => t.tip === "fatura" && t.yon === "satis")
-      .reduce((s, t) => s + (Number(t.tutar || 0) - Number(t.masraf || 0)), 0);
+      .reduce((s, t) => s + (tlTutar(t) - Number(t.masraf || 0)), 0);
     return (
       <>
         <div style={{ marginBottom: 16 }}>
@@ -269,7 +275,7 @@ export default function Muhasebe({ profil, yetkiVar, goster }) {
             firmaGoster={false} yuk={yuk}
             onSatirTikla={duzenleyebilir ? t => setForm({ ...BOS, ...t,
               company_id: t.company_id || "", project_id: t.project_id || "",
-              tutar: String(t.tutar ?? ""), kur: String(t.kur ?? ""), masraf: String(t.masraf ?? ""),
+              tutar: sayiMetni(t.tutar), kur: sayiMetni(t.kur), masraf: sayiMetni(t.masraf),
               dosya: null }) : undefined} />
         </div>
 
