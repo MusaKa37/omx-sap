@@ -35,8 +35,8 @@ Mimari ve modül haritası: [OKUBENI.md](OKUBENI.md)
 | ✅ | **Ürün Ağacı (BOM)** | Çok seviyeli ağaç, revizyon, pano etiketi, BOM → talep |
 | ✅ | **Satın Alma** | Talep → onay → sipariş → mal kabul, kur sabitleme |
 | ✅ | **Depo & Stok** | Çok depolu bakiye, transfer, sayım, rezerve |
-| ◻ | Puantaj | Proje × faaliyet saat girişi, harcırah, yönetici onayı |
-| ◻ | Servis & Ekipman | İş emri, ekipman parkı, PLC/HMI sürüm takibi, bakım takvimi |
+| ✅ | **Puantaj** | Proje × faaliyet saat girişi, harcırah, yönetici onayı |
+| ✅ | **Servis & Ekipman** | İş emri, ekipman parkı, PLC/HMI sürüm takibi, bakım takvimi |
 | ◻ | Teklif · Maliyet · Muhasebe | Teklif marjı, bütçe karşılaştırması, hakediş, cari ekstre |
 
 Tüm modüllerin veritabanı tabloları kurulu; ◻ işaretliler arayüz bekliyor.

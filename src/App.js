@@ -13,6 +13,9 @@ import Yapim     from "./modules/Yapim";
 import Depo      from "./modules/Depo";
 import SatinAlma from "./modules/SatinAlma";
 import Bom       from "./modules/Bom";
+import Puantaj   from "./modules/Puantaj";
+import Servis    from "./modules/Servis";
+import Ekipman   from "./modules/Ekipman";
 
 const MODULLER = {
   dashboard: Panel,
@@ -22,6 +25,9 @@ const MODULLER = {
   depo:      Depo,
   satinalma: SatinAlma,
   bom:       Bom,
+  puantaj:   Puantaj,
+  servis:    Servis,
+  ekipman:   Ekipman,
 };
 
 export default function App() {
