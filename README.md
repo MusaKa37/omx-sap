@@ -37,9 +37,12 @@ Mimari ve modül haritası: [OKUBENI.md](OKUBENI.md)
 | ✅ | **Depo & Stok** | Çok depolu bakiye, transfer, sayım, rezerve |
 | ✅ | **Puantaj** | Proje × faaliyet saat girişi, harcırah, yönetici onayı |
 | ✅ | **Servis & Ekipman** | İş emri, ekipman parkı, PLC/HMI sürüm takibi, bakım takvimi |
-| ◻ | Teklif · Maliyet · Muhasebe | Teklif marjı, bütçe karşılaştırması, hakediş, cari ekstre |
+| ✅ | **Teklifler** | Kalem bazlı maliyet ve marj, kazanılan teklif projeye dönüşür |
+| ✅ | **Proje Maliyet** | Bütçe ↔ gerçekleşen, kalem dağılımı, Excel'e aktarım |
+| ✅ | **Cari & Muhasebe** | Para birimi kırılımlı alacak/borç, fatura-ödeme, PDF ek, dönem kârı |
+| ✅ | **Ayarlar** | Kullanıcı ve rol yönetimi, yetki matrisi, kurlar, denetim kayıtları |
 
-Tüm modüllerin veritabanı tabloları kurulu; ◻ işaretliler arayüz bekliyor.
+Faz 1–4 tamamlandı: tüm modüller devrede.
 
 ---
 

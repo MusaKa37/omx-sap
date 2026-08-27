@@ -16,6 +16,10 @@ import Bom       from "./modules/Bom";
 import Puantaj   from "./modules/Puantaj";
 import Servis    from "./modules/Servis";
 import Ekipman   from "./modules/Ekipman";
+import Teklif    from "./modules/Teklif";
+import Maliyet   from "./modules/Maliyet";
+import Muhasebe  from "./modules/Muhasebe";
+import Ayarlar   from "./modules/Ayarlar";
 
 const MODULLER = {
   dashboard: Panel,
@@ -28,6 +32,10 @@ const MODULLER = {
   puantaj:   Puantaj,
   servis:    Servis,
   ekipman:   Ekipman,
+  teklifler: Teklif,
+  maliyet:   Maliyet,
+  muhasebe:  Muhasebe,
+  ayarlar:   Ayarlar,
 };
 
 export default function App() {
