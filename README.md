@@ -57,7 +57,11 @@ PostgREST yetkileri). Tekrar çalıştırılabilir. Ayrı ayrı çalıştırmak 
 | 5 | `05_storage.sql` | `omx-files` kovası ve dosya erişim politikaları |
 
 **Sıra önemlidir:** tohum verisi (4) onarım bölümünün (2) eklediği kısıtlara
-güvenir. `kurulum.sql` bu sırayı zaten uygular.
+güvenir. `kurulum.sql` bu sırayı zaten uygular — ayrı ayrı çalıştırmaya gerek yok.
+
+`db/sifirla.sql` baştan temiz kurulum içindir ve **veri siler**; içinde gerçek
+kayıt varsa kendini durduran bir güvenlik kilidi vardır. Normalde gerekmez,
+`kurulum.sql` mevcut kurulumu onarır.
 
 ### Otomatik akışlar
 
