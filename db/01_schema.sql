@@ -274,6 +274,8 @@ create table if not exists project_documents (
   revizyon     text default 'Rev.0',
   versiyon     text,                          -- PLC/HMI yazılım sürümü: v2.3.1
   dosya_url    text,
+  dosya_adi    text,                          -- kullanıcının yüklediği orijinal dosya adı
+  dosya_tipi   text,                          -- MIME tipi (application/pdf, ...)
   dosya_boyut  bigint,
   sahada_yuklu boolean default false,         -- bu versiyon sahada aktif mi
   yukleme_tarihi date,
@@ -282,6 +284,22 @@ create table if not exists project_documents (
   created_at   timestamptz default now()
 );
 create index if not exists idx_pdocs_proj on project_documents (project_id, tip);
+
+-- Proje günlüğü: tarihli bilgi notları.
+-- Tek bir "açıklama" alanı ekip için yetersiz kalıyor; kim ne zaman ne yazdı
+-- görünsün diye ayrı tablo.
+create table if not exists project_notes (
+  id           bigserial primary key,
+  project_id   bigint references projects(id) on delete cascade,
+  tarih        date not null default current_date,
+  tip          text default 'not',            -- not / karar / risk / musteri / saha / degisiklik
+  baslik       text,
+  icerik       text not null,
+  onemli       boolean default false,         -- panoda ve üstte öne çıkar
+  yazan_id     uuid references app_users(id),
+  created_at   timestamptz default now()
+);
+create index if not exists idx_pnotes_proj on project_notes (project_id, tarih desc);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 5. TEKLİF  (proje bazlı işte her şey teklifle başlar)

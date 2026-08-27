@@ -199,6 +199,19 @@ export async function uploadFile(path, file, bucket = STORAGE_BUCKET) {
   return `${SB_URL}/storage/v1/object/public/${bucket}/${path}`;
 }
 
+// Depodan dosya siler. Genel (public) URL'den nesne yolunu geri çözer.
+export async function deleteFile(url, bucket = STORAGE_BUCKET) {
+  const isaret = `/storage/v1/object/public/${bucket}/`;
+  const ix = String(url || "").indexOf(isaret);
+  if (ix < 0) return false;                       // dosyasız kayıt veya yabancı URL
+  const yol = url.slice(ix + isaret.length);
+  const t = getSession()?.access_token;
+  const res = await fetch(`${SB_URL}/storage/v1/object/${bucket}/${yol}`, {
+    method: "DELETE", headers: { apikey: SB_KEY, Authorization: `Bearer ${t}` },
+  });
+  return res.ok;
+}
+
 // ── Denetim kaydı ───────────────────────────────────────────────────────────
 export async function logAudit({ tablo, kayit_id, islem, aciklama, eski, yeni }) {
   const u = getSession()?.user;

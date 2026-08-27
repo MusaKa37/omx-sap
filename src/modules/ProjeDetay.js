@@ -3,11 +3,12 @@
 // Sekmeler: Özet · İş Kırılımı · Maliyet · Doküman
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { api, uploadFile } from "../services/api";
+import { api, uploadFile, deleteFile } from "../services/api";
 import { T, PROJE_TIPI_ETIKET, FAALIYET_ETIKET } from "../ui/theme";
 import { Kart, Btn, Rozet, Tablo, Modal, Alan, Giris, Metin, Secim, Satir,
          Sekmeler, Olcum, Ilerleme, Bos, OnayModal,
-         fmtPara, fmtTarih, fmtSayi, parseSayi, bugun } from "../ui/kit";
+         fmtPara, fmtTarih, fmtSayi, fmtBoyut, parseSayi, bugun,
+         DosyaRozet, uzanti, Arama, eslesir } from "../ui/kit";
 
 const MALIYET_KAYNAK = [
   ["malzeme", "Malzeme"], ["iscilik", "İşçilik"], ["taseron", "Taşeron"],
@@ -15,10 +16,22 @@ const MALIYET_KAYNAK = [
   ["genel_gider", "Genel Gider"], ["diger", "Diğer"],
 ];
 const DOKUMAN_TIPI = [
-  ["sozlesme", "Sözleşme"], ["teknik_resim", "Teknik Resim"], ["eplan", "Elektrik Projesi (EPLAN)"],
-  ["plc_program", "PLC Programı"], ["hmi_program", "HMI / SCADA Projesi"],
-  ["test_raporu", "Test Raporu"], ["devreye_alma", "Devreye Alma Tutanağı"],
-  ["kilavuz", "Kılavuz / Dokümantasyon"], ["fotograf", "Saha Fotoğrafı"], ["diger", "Diğer"],
+  ["sozlesme", "Sözleşme & Teklif"], ["teknik_resim", "Teknik Resim"],
+  ["eplan", "Elektrik Projesi (EPLAN)"], ["plc_program", "PLC Programı"],
+  ["hmi_program", "HMI / SCADA Projesi"], ["malzeme_listesi", "Malzeme Listesi (Excel)"],
+  ["hesap", "Hesap & Analiz"], ["test_raporu", "Test Raporu"],
+  ["devreye_alma", "Devreye Alma Tutanağı"], ["kilavuz", "Kılavuz & Dokümantasyon"],
+  ["fotograf", "Fotoğraf & Görsel"], ["yazisma", "Yazışma"], ["diger", "Diğer"],
+];
+const DOKUMAN_TIPI_AD = Object.fromEntries(DOKUMAN_TIPI);
+
+const NOT_TIPI = [
+  ["not", "Not", "#475569", "#f1f5f9"],
+  ["karar", "Karar", "#1d4ed8", "#dbeafe"],
+  ["risk", "Risk", "#b91c1c", "#fee2e2"],
+  ["musteri", "Müşteri Görüşmesi", "#15803d", "#dcfce7"],
+  ["saha", "Saha Raporu", "#a16207", "#fef3c7"],
+  ["degisiklik", "Değişiklik Talebi", "#7c3aed", "#ede9fe"],
 ];
 const GOREV_DURUM = [["planlandi", "Planlandı"], ["devam", "Devam"], ["tamamlandi", "Tamamlandı"], ["beklemede", "Beklemede"]];
 
@@ -28,6 +41,7 @@ export default function ProjeDetay({ projeId, ozet, profil, yetkiVar, goster, ku
   const [gorevler, setGorev] = useState([]);
   const [maliyet, setMaliyet] = useState([]);
   const [dokuman, setDokuman] = useState([]);
+  const [notlar, setNotlar]   = useState([]);
   const [yuk, setYuk]       = useState(true);
   const [ozetV, setOzetV]   = useState(ozet);
 
@@ -37,7 +51,7 @@ export default function ProjeDetay({ projeId, ozet, profil, yetkiVar, goster, ku
   const yukle = useCallback(async () => {
     setYuk(true);
     try {
-      const [p, g, m, d, o] = await Promise.all([
+      const [p, g, m, d, o, n] = await Promise.all([
         // projects → app_users ilişkisi iki yabancı anahtar üzerinden kurulduğu için
         // gömülü sorgu kullanılmaz; sorumlu, kullanicilar listesinden eşleştirilir.
         api.one("projects", projeId, "*,musteri:companies(id,unvan,telefon,ilgili_kisi)"),
@@ -45,8 +59,11 @@ export default function ProjeDetay({ projeId, ozet, profil, yetkiVar, goster, ku
         yetkiVar("maliyet") ? api.list("project_costs", { eq: { project_id: projeId }, order: "tarih.desc,id.desc", limit: 500 }).catch(() => []) : [],
         api.list("project_documents", { select: "*,yukleyen:app_users(ad_soyad)", eq: { project_id: projeId }, order: "created_at.desc" }).catch(() => []),
         api.list("v_project_summary", { eq: { id: projeId }, limit: 1 }).catch(() => []),
+        api.list("project_notes", { select: "*,yazan:app_users(ad_soyad)",
+                                    eq: { project_id: projeId },
+                                    order: "onemli.desc,tarih.desc,id.desc" }).catch(() => []),
       ]);
-      setProje(p); setGorev(g); setMaliyet(m); setDokuman(d);
+      setProje(p); setGorev(g); setMaliyet(m); setDokuman(d); setNotlar(n);
       if (o?.[0]) setOzetV(o[0]);
     } catch (e) { goster("Proje okunamadı: " + e.message, "hata"); }
     finally { setYuk(false); }
@@ -106,9 +123,10 @@ export default function ProjeDetay({ projeId, ozet, profil, yetkiVar, goster, ku
 
       <Sekmeler aktif={sekme} onDegisim={setSekme} sekmeler={[
         { anahtar: "ozet",    baslik: "Özet" },
+        { anahtar: "bilgi",   baslik: "Bilgi & Notlar", sayi: notlar.length },
+        { anahtar: "dosya",   baslik: "Dosyalar", sayi: dokuman.length },
         { anahtar: "gorev",   baslik: "İş Kırılımı", sayi: gorevler.length },
         { anahtar: "maliyet", baslik: "Maliyet", sayi: maliyet.length },
-        { anahtar: "dokuman", baslik: "Doküman", sayi: dokuman.length },
       ]} />
 
       {sekme === "ozet"    && <Ozet proje={proje} ozetV={ozetV} gorevler={gorevler} butce={butce} />}
@@ -116,8 +134,12 @@ export default function ProjeDetay({ projeId, ozet, profil, yetkiVar, goster, ku
                                 yetki={duzenleyebilir} goster={goster} onYenile={yukle} />}
       {sekme === "maliyet" && <Maliyetler projeId={projeId} maliyet={maliyet} butce={proje}
                                 yetki={yetkiVar("maliyet", "ekle")} goster={goster} onYenile={yukle} />}
-      {sekme === "dokuman" && <Dokumanlar projeId={projeId} dokuman={dokuman} profil={profil}
-                                yetki={yetkiVar("dokuman", "ekle")} goster={goster} onYenile={yukle} />}
+      {sekme === "bilgi"   && <BilgiNotlar proje={proje} notlar={notlar} profil={profil}
+                                yetki={duzenleyebilir} goster={goster} onYenile={yukle} />}
+      {sekme === "dosya"   && <Dosyalar projeId={projeId} dokuman={dokuman} profil={profil}
+                                yetki={yetkiVar("dokuman", "ekle")}
+                                silebilir={yetkiVar("dokuman", "sil")}
+                                goster={goster} onYenile={yukle} />}
     </>
   );
 }
@@ -434,100 +456,451 @@ function Maliyetler({ projeId, maliyet, yetki, goster, onYenile }) {
   );
 }
 
-// ── DOKÜMAN SEKMESİ ─────────────────────────────────────────────────────────
-function Dokumanlar({ projeId, dokuman, profil, yetki, goster, onYenile }) {
-  const [form, setForm] = useState(null);
-  const [kay, setKay] = useState(false);
+// ── BİLGİ & NOTLAR SEKMESİ ──────────────────────────────────────────────────
+// Tek bir "açıklama" alanı ekip için yetersiz kalıyor: kimin ne zaman ne yazdığı
+// görünsün diye projenin tarihli bir günlüğü var. Önemli işaretli notlar üstte.
+function BilgiNotlar({ proje, notlar, profil, yetki, goster, onYenile }) {
+  const [aciklama, setAciklama] = useState(proje.aciklama || "");
+  const [duzenle, setDuzenle]   = useState(false);
+  const [kay, setKay]           = useState(false);
+  const [form, setForm]         = useState(null);
+  const [silinecek, setSil]     = useState(null);
+  const [fTip, setFTip]         = useState("");
 
-  async function kaydet() {
-    if (!form.ad.trim()) return goster("Doküman adı zorunlu.", "hata");
+  useEffect(() => { setAciklama(proje.aciklama || ""); }, [proje.aciklama]);
+
+  async function aciklamaKaydet() {
     setKay(true);
     try {
-      let url = form.dosya_url || null, boyut = null;
-      if (form.dosya) {
-        const yol = `projeler/${projeId}/${Date.now()}_${form.dosya.name.replace(/[^\w.-]/g, "_")}`;
-        url = await uploadFile(yol, form.dosya);
-        boyut = form.dosya.size;
-      }
-      await api.insert("project_documents", {
-        project_id: projeId, tip: form.tip, ad: form.ad.trim(),
-        revizyon: form.revizyon || "Rev.0", versiyon: form.versiyon || null,
-        dosya_url: url, dosya_boyut: boyut,
-        sahada_yuklu: !!form.sahada_yuklu,
-        yukleme_tarihi: form.yukleme_tarihi || null,
-        yukleyen_id: profil?.id || null, notlar: form.notlar || null,
-      });
-      goster("Doküman eklendi.", "basari");
+      await api.update("projects", proje.id, { aciklama: aciklama.trim() || null });
+      goster("Proje açıklaması kaydedildi.", "basari");
+      setDuzenle(false); onYenile();
+    } catch (e) { goster(e.message, "hata"); } finally { setKay(false); }
+  }
+
+  async function notKaydet() {
+    if (!form.icerik.trim()) return goster("Not içeriği boş olamaz.", "hata");
+    setKay(true);
+    try {
+      const govde = {
+        project_id: proje.id, tarih: form.tarih, tip: form.tip,
+        baslik: form.baslik?.trim() || null, icerik: form.icerik.trim(),
+        onemli: !!form.onemli, yazan_id: profil?.id || null,
+      };
+      if (form.id) await api.update("project_notes", form.id, govde);
+      else await api.insert("project_notes", govde);
+      goster(form.id ? "Not güncellendi." : "Not eklendi.", "basari");
       setForm(null); onYenile();
     } catch (e) { goster(e.message, "hata"); } finally { setKay(false); }
   }
 
+  async function notSil() {
+    try { await api.remove("project_notes", silinecek.id); goster("Not silindi.", "basari"); setSil(null); onYenile(); }
+    catch (e) { goster(e.message, "hata"); setSil(null); }
+  }
+
+  const gorunen = fTip ? notlar.filter(n => n.tip === fTip) : notlar;
+  const sayilar = NOT_TIPI.map(([k, ad]) => [k, ad, notlar.filter(n => n.tip === k).length]);
+
   return (
-    <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 12 }}>
-        <div style={{ fontSize: 12.5, color: T.renk.metinPasif }}>
-          Sahada aktif olan PLC / HMI sürümü <b>“sahada yüklü”</b> işaretiyle takip edilir.
+    <div style={{ display: "grid", gap: 16, gridTemplateColumns: "minmax(0,1fr)" }}>
+      {/* PROJE AÇIKLAMASI */}
+      <Kart>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <BolumAd>Proje Açıklaması</BolumAd>
+          {yetki && !duzenle && <Btn boyut="sm" onClick={() => setDuzenle(true)} ikon="✎">Düzenle</Btn>}
         </div>
-        {yetki && <Btn tur="birincil" boyut="sm" ikon="＋"
-          onClick={() => setForm({ tip: "plc_program", ad: "", revizyon: "Rev.0", versiyon: "",
-            yukleme_tarihi: bugun(), sahada_yuklu: false, notlar: "", dosya: null })}>
-          Doküman Ekle</Btn>}
+        {duzenle ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <Metin value={aciklama} satir={7} onChange={e => setAciklama(e.target.value)}
+              placeholder={"Kapsam, teknik çözüm, özel şartlar, müşteri beklentileri, dikkat edilecek noktalar…\n\nBu alan projeyi ilk kez açan bir ekip arkadaşının okuyacağı özet metindir."} />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Btn boyut="sm" onClick={() => { setAciklama(proje.aciklama || ""); setDuzenle(false); }}>Vazgeç</Btn>
+              <Btn boyut="sm" tur="birincil" onClick={aciklamaKaydet} disabled={kay}>
+                {kay ? "Kaydediliyor…" : "Kaydet"}</Btn>
+            </div>
+          </div>
+        ) : aciklama ? (
+          <div style={{ fontSize: 13.5, lineHeight: 1.75, color: T.renk.metin, whiteSpace: "pre-wrap" }}>{aciklama}</div>
+        ) : (
+          <div style={{ fontSize: 13, color: T.renk.metinPasif, fontStyle: "italic" }}>
+            Henüz açıklama yazılmadı. {yetki && "Sağ üstteki Düzenle ile ekleyebilirsiniz."}
+          </div>
+        )}
+      </Kart>
+
+      {/* PROJE GÜNLÜĞÜ */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+          gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 640 }}>Proje Günlüğü</h2>
+            <p style={{ margin: "2px 0 0", fontSize: 12.5, color: T.renk.metinPasif }}>
+              Kararlar, riskler, müşteri görüşmeleri ve saha notları — kim, ne zaman yazdı
+            </p>
+          </div>
+          {yetki && <Btn tur="birincil" boyut="sm" ikon="＋"
+            onClick={() => setForm({ tarih: bugun(), tip: "not", baslik: "", icerik: "", onemli: false })}>
+            Not Ekle</Btn>}
+        </div>
+
+        {notlar.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            <FiltreCip aktif={!fTip} onTikla={() => setFTip("")}>Tümü · {notlar.length}</FiltreCip>
+            {sayilar.filter(([, , n]) => n > 0).map(([k, ad, n]) => (
+              <FiltreCip key={k} aktif={fTip === k} onTikla={() => setFTip(fTip === k ? "" : k)}>{ad} · {n}</FiltreCip>
+            ))}
+          </div>
+        )}
+
+        {!gorunen.length ? (
+          <Kart><Bos ikon="✎" baslik={fTip ? "Bu tipte not yok" : "Henüz not girilmedi"}
+            aciklama={fTip ? undefined : "Projeyle ilgili her kararı, riski ve müşteri görüşmesini buraya yazın; ay sonra kimse hatırlamıyor."} /></Kart>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+            {gorunen.map(n => {
+              const [, ad, renk, zemin] = NOT_TIPI.find(t => t[0] === n.tip) || ["", n.tip, T.renk.metinSoluk, "#f1f5f9"];
+              return (
+                <Kart key={n.id} pad={16} style={n.onemli ? { borderLeft: `3px solid ${T.renk.uyari}` } : undefined}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12,
+                    alignItems: "flex-start", marginBottom: 8, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                      <Rozet renk={renk} zemin={zemin}>{ad}</Rozet>
+                      {n.onemli && <Rozet renk={T.renk.uyari} zemin={T.renk.uyariAcik}>★ Önemli</Rozet>}
+                      {n.baslik && <span style={{ fontWeight: 640, fontSize: 14 }}>{n.baslik}</span>}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 11.5, color: T.renk.metinPasif }}>
+                      <span>{fmtTarih(n.tarih)} · {n.yazan?.ad_soyad || "—"}</span>
+                      {yetki && (
+                        <>
+                          <button onClick={() => setForm({ ...n, baslik: n.baslik || "" })}
+                            style={{ border: "none", background: "none", cursor: "pointer",
+                              color: T.renk.marka, fontSize: 12, fontWeight: 600 }}>Düzenle</button>
+                          <button onClick={() => setSil(n)}
+                            style={{ border: "none", background: "none", cursor: "pointer",
+                              color: T.renk.hata, fontSize: 14 }}>×</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.7, whiteSpace: "pre-wrap", color: T.renk.metin }}>{n.icerik}</div>
+                </Kart>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <Tablo veri={dokuman} bosMesaj="Bu projeye doküman eklenmedi"
-        sutunlar={[
-          { anahtar: "tip", baslik: "Tip", genislik: 180,
-            render: r => DOKUMAN_TIPI.find(([k]) => k === r.tip)?.[1] || r.tip },
-          { anahtar: "ad", baslik: "Doküman",
-            render: r => (
-              <div>
-                <div style={{ fontWeight: 550 }}>{r.ad}</div>
-                {r.notlar && <div style={{ fontSize: 11.5, color: T.renk.metinPasif }}>{r.notlar}</div>}
-              </div>
-            )},
-          { anahtar: "revizyon", baslik: "Revizyon", genislik: 92 },
-          { anahtar: "versiyon", baslik: "Sürüm", genislik: 100, render: r => r.versiyon || "—" },
-          { anahtar: "sahada_yuklu", baslik: "Sahada", genislik: 100,
-            render: r => r.sahada_yuklu
-              ? <Rozet renk={T.renk.basari} zemin={T.renk.basariAcik}>Yüklü</Rozet>
-              : <span style={{ color: T.renk.metinPasif, fontSize: 12 }}>—</span> },
-          { anahtar: "yukleme_tarihi", baslik: "Tarih", genislik: 104, render: r => fmtTarih(r.yukleme_tarihi || r.created_at) },
-          { anahtar: "dosya_url", baslik: "Dosya", genislik: 80, hizala: "center",
-            render: r => r.dosya_url
-              ? <a href={r.dosya_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                  style={{ color: T.renk.marka, fontWeight: 600, fontSize: 12 }}>Aç ↗</a>
-              : "—" },
-        ]} />
-
-      <Modal acik={!!form} onKapat={() => setForm(null)} genislik={620} baslik="Doküman Ekle"
+      <Modal acik={!!form} onKapat={() => setForm(null)} genislik={620}
+        baslik={form?.id ? "Notu Düzenle" : "Yeni Not"}
         altBar={<>
           <Btn onClick={() => setForm(null)}>Vazgeç</Btn>
-          <Btn tur="birincil" onClick={kaydet} disabled={kay}>{kay ? "Yükleniyor…" : "Kaydet"}</Btn>
+          <Btn tur="birincil" onClick={notKaydet} disabled={kay}>{kay ? "Kaydediliyor…" : "Kaydet"}</Btn>
         </>}>
         {form && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <Satir>
-              <Alan etiket="Doküman Tipi" genislik="230px">
+              <Alan etiket="Tarih" genislik="150px">
+                <Giris type="date" value={form.tarih} onChange={e => setForm(f => ({ ...f, tarih: e.target.value }))} />
+              </Alan>
+              <Alan etiket="Not Tipi" genislik="200px">
+                <Secim value={form.tip} bos={false} secenekler={NOT_TIPI.map(([k, a]) => [k, a])}
+                  onChange={e => setForm(f => ({ ...f, tip: e.target.value }))} />
+              </Alan>
+              <Alan etiket="Başlık" genislik="240px">
+                <Giris value={form.baslik} onChange={e => setForm(f => ({ ...f, baslik: e.target.value }))}
+                  placeholder="Kısa özet (isteğe bağlı)" />
+              </Alan>
+            </Satir>
+            <Alan etiket="İçerik" zorunlu>
+              <Metin value={form.icerik} satir={6}
+                onChange={e => setForm(f => ({ ...f, icerik: e.target.value }))}
+                placeholder="Ne konuşuldu, ne karar verildi, ne yapılacak…" />
+            </Alan>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+              <input type="checkbox" checked={!!form.onemli}
+                onChange={e => setForm(f => ({ ...f, onemli: e.target.checked }))} />
+              Önemli olarak işaretle (listenin en üstünde kalır)
+            </label>
+          </div>
+        )}
+      </Modal>
+
+      <OnayModal acik={!!silinecek} tehlike onHayir={() => setSil(null)} onEvet={notSil}
+        baslik="Not silinsin mi?" mesaj="Bu günlük kaydı kalıcı olarak silinecek." />
+    </div>
+  );
+}
+
+function FiltreCip({ aktif, onTikla, children }) {
+  return (
+    <button onClick={onTikla} style={{
+      padding: "5px 11px", borderRadius: 999, cursor: "pointer", fontSize: 12, fontWeight: 550,
+      border: `1px solid ${aktif ? T.renk.marka : T.renk.cizgi}`,
+      background: aktif ? T.renk.markaAcik : "#fff",
+      color: aktif ? T.renk.marka : T.renk.metinSoluk,
+    }}>{children}</button>
+  );
+}
+
+// ── DOSYALAR SEKMESİ ────────────────────────────────────────────────────────
+// Her tür dosya kabul edilir: pdf, zip, xlsx, docx, dwg, görsel, PLC/HMI yedeği.
+// Birden fazla dosya aynı anda seçilebilir; sürükle-bırak da çalışır.
+const MAKS_BOYUT = 50 * 1024 * 1024;   // Supabase Storage varsayılan sınırı
+
+function Dosyalar({ projeId, dokuman, profil, yetki, silebilir, goster, onYenile }) {
+  const [form, setForm]     = useState(null);
+  const [kay, setKay]       = useState(false);
+  const [ilerleme, setIler] = useState("");
+  const [silinecek, setSil] = useState(null);
+  const [ara, setAra]       = useState("");
+  const [fTip, setFTip]     = useState("");
+  const [suruklu, setSuruklu] = useState(false);
+
+  const gorunen = useMemo(() => dokuman.filter(d => {
+    if (fTip && d.tip !== fTip) return false;
+    if (ara && !(eslesir(d.ad, ara) || eslesir(d.dosya_adi, ara) || eslesir(d.notlar, ara)
+              || eslesir(d.versiyon, ara) || eslesir(DOKUMAN_TIPI_AD[d.tip], ara))) return false;
+    return true;
+  }), [dokuman, ara, fTip]);
+
+  const toplamBoyut = dokuman.reduce((t, d) => t + Number(d.dosya_boyut || 0), 0);
+
+  function dosyalariAl(listesi) {
+    const dosyalar = [...listesi];
+    if (!dosyalar.length) return;
+    const buyuk = dosyalar.find(f => f.size > MAKS_BOYUT);
+    if (buyuk) return goster(`"${buyuk.name}" 50 MB sınırını aşıyor. Sıkıştırıp tekrar deneyin.`, "hata");
+    setForm({
+      tip: tahminiTip(dosyalar[0].name), dosyalar,
+      ad: dosyalar.length === 1 ? dosyalar[0].name.replace(/\.[^.]+$/, "") : "",
+      revizyon: "Rev.0", versiyon: "", yukleme_tarihi: bugun(),
+      sahada_yuklu: false, notlar: "",
+    });
+  }
+
+  // Uzantıya bakıp makul bir tip önerir; kullanıcı yine değiştirebilir
+  function tahminiTip(ad) {
+    const u = uzanti(ad);
+    if (["xlsx", "xls", "csv"].includes(u)) return "malzeme_listesi";
+    if (["png", "jpg", "jpeg", "gif", "webp", "heic"].includes(u)) return "fotograf";
+    if (["dwg", "dxf", "step", "stp", "igs"].includes(u)) return "teknik_resim";
+    if (["zap", "s7p", "ap15", "ap16", "mwp"].includes(u)) return "plc_program";
+    if (["docx", "doc", "msg", "eml"].includes(u)) return "yazisma";
+    return "diger";
+  }
+
+  async function kaydet() {
+    const cok = form.dosyalar?.length > 1;
+    if (!cok && !form.ad.trim() && !form.dosyalar?.length)
+      return goster("Doküman adı zorunlu.", "hata");
+    setKay(true);
+    try {
+      const dosyalar = form.dosyalar || [];
+      if (!dosyalar.length) {
+        // Dosyasız kayıt: yalnızca bilgi girişi (örn. müşteride duran belge)
+        await api.insert("project_documents", govdeYap(form, null, null));
+      } else {
+        for (let i = 0; i < dosyalar.length; i++) {
+          const d = dosyalar[i];
+          setIler(`${i + 1}/${dosyalar.length} · ${d.name}`);
+          const temiz = d.name.replace(/[^\w.-]/g, "_");
+          const yol = `projeler/${projeId}/${Date.now()}_${i}_${temiz}`;
+          const url = await uploadFile(yol, d);
+          await api.insert("project_documents",
+            govdeYap(form, d, url, cok ? d.name.replace(/\.[^.]+$/, "") : null));
+        }
+      }
+      goster(dosyalar.length > 1 ? `${dosyalar.length} dosya yüklendi.` : "Dosya yüklendi.", "basari");
+      setForm(null); setIler(""); onYenile();
+    } catch (e) {
+      goster(e.message.includes("yüklenemedi")
+        ? "Dosya yüklenemedi. Supabase'de 'omx-files' kovası ve yükleme politikası kurulu mu? (db/kurulum.sql)"
+        : e.message, "hata");
+    } finally { setKay(false); setIler(""); }
+  }
+
+  function govdeYap(f, dosya, url, adGecersizKilma) {
+    return {
+      project_id: projeId, tip: f.tip,
+      ad: (adGecersizKilma || f.ad || dosya?.name || "Adsız").trim(),
+      revizyon: f.revizyon || "Rev.0", versiyon: f.versiyon || null,
+      dosya_url: url, dosya_adi: dosya?.name || null,
+      dosya_tipi: dosya?.type || null, dosya_boyut: dosya?.size || null,
+      sahada_yuklu: !!f.sahada_yuklu, yukleme_tarihi: f.yukleme_tarihi || null,
+      yukleyen_id: profil?.id || null, notlar: f.notlar || null,
+    };
+  }
+
+  async function sil() {
+    try {
+      if (silinecek.dosya_url) await deleteFile(silinecek.dosya_url).catch(() => {});
+      await api.remove("project_documents", silinecek.id);
+      goster("Dosya silindi.", "basari"); setSil(null); onYenile();
+    } catch (e) { goster(e.message, "hata"); setSil(null); }
+  }
+
+  const tipSayilari = DOKUMAN_TIPI
+    .map(([k, ad]) => [k, ad, dokuman.filter(d => d.tip === k).length])
+    .filter(([, , n]) => n > 0);
+
+  return (
+    <>
+      {/* YÜKLEME ALANI */}
+      {yetki && (
+        <div
+          onDragOver={e => { e.preventDefault(); setSuruklu(true); }}
+          onDragLeave={() => setSuruklu(false)}
+          onDrop={e => { e.preventDefault(); setSuruklu(false); dosyalariAl(e.dataTransfer.files); }}
+          style={{
+            border: `1.5px dashed ${suruklu ? T.renk.marka : T.renk.cizgiKoyu}`,
+            background: suruklu ? T.renk.markaAcik : "#fff",
+            borderRadius: 14, padding: "22px 20px", textAlign: "center", marginBottom: 16,
+            transition: "background .12s, border-color .12s",
+          }}>
+          <div style={{ fontSize: 22, marginBottom: 6, opacity: .55 }}>⇪</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+            Dosyaları buraya sürükleyin
+          </div>
+          <div style={{ fontSize: 12.5, color: T.renk.metinPasif, marginBottom: 12 }}>
+            PDF · Excel · Word · ZIP · DWG · görsel · PLC/HMI yedeği — dosya başına en fazla 50 MB
+          </div>
+          <label style={{ display: "inline-block" }}>
+            <input type="file" multiple style={{ display: "none" }}
+              onChange={e => { dosyalariAl(e.target.files); e.target.value = ""; }} />
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 16px",
+              background: T.renk.marka, color: "#fff", borderRadius: T.r.md,
+              fontSize: 13, fontWeight: 550, cursor: "pointer",
+            }}>Dosya Seç</span>
+          </label>
+          <button onClick={() => setForm({ tip: "diger", dosyalar: [], ad: "", revizyon: "Rev.0",
+            versiyon: "", yukleme_tarihi: bugun(), sahada_yuklu: false, notlar: "" })}
+            style={{ marginLeft: 10, border: `1px solid ${T.renk.cizgiKoyu}`, background: "#fff",
+              borderRadius: T.r.md, padding: "8px 15px", fontSize: 13, cursor: "pointer",
+              color: T.renk.metinSoluk }}>
+            Dosyasız kayıt
+          </button>
+        </div>
+      )}
+
+      {/* FİLTRELER */}
+      {dokuman.length > 0 && (
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+          <Arama deger={ara} onDegisim={setAra} yer="Dosya adı, sürüm, not…" genislik={260} />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <FiltreCip aktif={!fTip} onTikla={() => setFTip("")}>Tümü · {dokuman.length}</FiltreCip>
+            {tipSayilari.map(([k, ad, n]) => (
+              <FiltreCip key={k} aktif={fTip === k} onTikla={() => setFTip(fTip === k ? "" : k)}>{ad} · {n}</FiltreCip>
+            ))}
+          </div>
+          <div style={{ marginLeft: "auto", fontSize: 12.5, color: T.renk.metinPasif }}>
+            {gorunen.length} dosya · {fmtBoyut(toplamBoyut)}
+          </div>
+        </div>
+      )}
+
+      {/* LİSTE */}
+      {!gorunen.length ? (
+        <Kart><Bos ikon="🗀" baslik={dokuman.length ? "Filtreye uyan dosya yok" : "Henüz dosya yüklenmedi"}
+          aciklama={dokuman.length ? undefined : "Sözleşme, teknik resim, malzeme listesi, PLC yedeği, saha fotoğrafı — hepsi buraya."} /></Kart>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 1, background: T.renk.cizgi,
+          border: `1px solid ${T.renk.cizgi}`, borderRadius: T.r.lg, overflow: "hidden" }}>
+          {gorunen.map(d => (
+            <div key={d.id} style={{ background: "#fff", padding: "12px 15px", display: "flex",
+              alignItems: "center", gap: 13, flexWrap: "wrap" }}>
+              <DosyaRozet ad={d.dosya_adi || d.ad} />
+              <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 600, fontSize: 13.5 }}>{d.ad}</span>
+                  {d.revizyon && d.revizyon !== "Rev.0" &&
+                    <Rozet renk={T.renk.marka} zemin={T.renk.markaAcik}>{d.revizyon}</Rozet>}
+                  {d.versiyon && <span style={{ fontFamily: "monospace", fontSize: 11.5,
+                    color: T.renk.metinSoluk, background: "#f1f5f9", padding: "1px 6px", borderRadius: 4 }}>{d.versiyon}</span>}
+                  {d.sahada_yuklu && <Rozet renk={T.renk.basari} zemin={T.renk.basariAcik}>Sahada yüklü</Rozet>}
+                </div>
+                <div style={{ fontSize: 11.5, color: T.renk.metinPasif, marginTop: 2,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {DOKUMAN_TIPI_AD[d.tip] || d.tip}
+                  {d.dosya_adi ? ` · ${d.dosya_adi}` : " · dosyasız kayıt"}
+                  {d.dosya_boyut ? ` · ${fmtBoyut(d.dosya_boyut)}` : ""}
+                </div>
+                {d.notlar && <div style={{ fontSize: 12, color: T.renk.metinSoluk, marginTop: 4 }}>{d.notlar}</div>}
+              </div>
+              <div style={{ textAlign: "right", fontSize: 11.5, color: T.renk.metinPasif, flexShrink: 0 }}>
+                <div>{fmtTarih(d.yukleme_tarihi || d.created_at)}</div>
+                <div>{d.yukleyen?.ad_soyad || "—"}</div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                {d.dosya_url ? (
+                  <a href={d.dosya_url} target="_blank" rel="noreferrer" download={d.dosya_adi || undefined}
+                    style={{ padding: "6px 12px", border: `1px solid ${T.renk.cizgiKoyu}`,
+                      borderRadius: T.r.md, fontSize: 12, fontWeight: 550, color: T.renk.marka,
+                      textDecoration: "none", whiteSpace: "nowrap" }}>İndir ↓</a>
+                ) : (
+                  <span style={{ fontSize: 12, color: T.renk.metinPasif, padding: "6px 4px" }}>—</span>
+                )}
+                {silebilir && (
+                  <button onClick={() => setSil(d)} title="Sil"
+                    style={{ border: `1px solid #fecaca`, background: "#fff", borderRadius: T.r.md,
+                      padding: "6px 10px", cursor: "pointer", color: T.renk.hata, fontSize: 13 }}>×</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* YÜKLEME FORMU */}
+      <Modal acik={!!form} onKapat={() => !kay && setForm(null)} genislik={640}
+        baslik={form?.dosyalar?.length > 1 ? `${form.dosyalar.length} dosya yükleniyor`
+                : form?.dosyalar?.length ? "Dosya bilgileri" : "Dosyasız kayıt"}
+        aciklama={form?.dosyalar?.length > 1
+          ? "Ortak bilgiler tüm dosyalara uygulanır; ad olarak her dosyanın kendi adı kullanılır."
+          : undefined}
+        altBar={<>
+          <Btn onClick={() => setForm(null)} disabled={kay}>Vazgeç</Btn>
+          <Btn tur="birincil" onClick={kaydet} disabled={kay}>
+            {kay ? (ilerleme || "Yükleniyor…") : "Kaydet"}</Btn>
+        </>}>
+        {form && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {form.dosyalar?.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 170,
+                overflowY: "auto", background: "#f8fafc", padding: 11, borderRadius: 9 }}>
+                {form.dosyalar.map((d, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
+                    <DosyaRozet ad={d.name} boyut={26} />
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
+                    <span style={{ color: T.renk.metinPasif, flexShrink: 0 }}>{fmtBoyut(d.size)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Satir>
+              <Alan etiket="Doküman Tipi" genislik="240px">
                 <Secim value={form.tip} bos={false} secenekler={DOKUMAN_TIPI}
                   onChange={e => setForm(f => ({ ...f, tip: e.target.value }))} />
               </Alan>
-              <Alan etiket="Doküman Adı" zorunlu genislik="280px">
-                <Giris value={form.ad} onChange={e => setForm(f => ({ ...f, ad: e.target.value }))}
-                  placeholder="Örn. Ana hat PLC programı" />
-              </Alan>
+              {form.dosyalar?.length <= 1 && (
+                <Alan etiket="Doküman Adı" genislik="300px" ipucu="Boş bırakılırsa dosya adı kullanılır">
+                  <Giris value={form.ad} onChange={e => setForm(f => ({ ...f, ad: e.target.value }))} />
+                </Alan>
+              )}
             </Satir>
             <Satir>
               <Alan etiket="Revizyon" genislik="130px">
                 <Giris value={form.revizyon} onChange={e => setForm(f => ({ ...f, revizyon: e.target.value }))} placeholder="Rev.0" />
               </Alan>
-              <Alan etiket="Yazılım Sürümü" genislik="150px" ipucu="PLC / HMI için">
+              <Alan etiket="Yazılım Sürümü" genislik="160px" ipucu="PLC / HMI dosyaları için">
                 <Giris value={form.versiyon} onChange={e => setForm(f => ({ ...f, versiyon: e.target.value }))} placeholder="v2.3.1" />
               </Alan>
-              <Alan etiket="Yükleme Tarihi" genislik="150px">
+              <Alan etiket="Tarih" genislik="150px">
                 <Giris type="date" value={form.yukleme_tarihi}
                   onChange={e => setForm(f => ({ ...f, yukleme_tarihi: e.target.value }))} />
               </Alan>
-              <Alan etiket="Sahada Yüklü mü?" genislik="150px">
+              <Alan etiket="Sahada Yüklü mü?" genislik="170px">
                 <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "9px 0" }}>
                   <input type="checkbox" checked={form.sahada_yuklu}
                     onChange={e => setForm(f => ({ ...f, sahada_yuklu: e.target.checked }))} />
@@ -535,15 +908,18 @@ function Dokumanlar({ projeId, dokuman, profil, yetki, goster, onYenile }) {
                 </label>
               </Alan>
             </Satir>
-            <Alan etiket="Dosya" ipucu="PDF, ZIP, DWG, proje yedeği…">
-              <Giris type="file" onChange={e => setForm(f => ({ ...f, dosya: e.target.files?.[0] || null }))} />
-            </Alan>
             <Alan etiket="Notlar">
-              <Metin value={form.notlar} satir={2} onChange={e => setForm(f => ({ ...f, notlar: e.target.value }))} />
+              <Metin value={form.notlar} satir={2}
+                onChange={e => setForm(f => ({ ...f, notlar: e.target.value }))}
+                placeholder="Neyi kapsıyor, neden yüklendi…" />
             </Alan>
           </div>
         )}
       </Modal>
+
+      <OnayModal acik={!!silinecek} tehlike onHayir={() => setSil(null)} onEvet={sil}
+        baslik="Dosya silinsin mi?"
+        mesaj={`"${silinecek?.ad}" kaydı ve varsa yüklenen dosya kalıcı olarak silinecek.`} />
     </>
   );
 }

@@ -12,7 +12,7 @@
 
 
 -- ══════════════════════════════════════════════════════════════════════════
--- BÖLÜM 1/3 · ŞEMA
+-- BÖLÜM 1/4 · ŞEMA
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ============================================================================
@@ -291,6 +291,8 @@ create table if not exists project_documents (
   revizyon     text default 'Rev.0',
   versiyon     text,                          -- PLC/HMI yazılım sürümü: v2.3.1
   dosya_url    text,
+  dosya_adi    text,                          -- kullanıcının yüklediği orijinal dosya adı
+  dosya_tipi   text,                          -- MIME tipi (application/pdf, ...)
   dosya_boyut  bigint,
   sahada_yuklu boolean default false,         -- bu versiyon sahada aktif mi
   yukleme_tarihi date,
@@ -299,6 +301,22 @@ create table if not exists project_documents (
   created_at   timestamptz default now()
 );
 create index if not exists idx_pdocs_proj on project_documents (project_id, tip);
+
+-- Proje günlüğü: tarihli bilgi notları.
+-- Tek bir "açıklama" alanı ekip için yetersiz kalıyor; kim ne zaman ne yazdı
+-- görünsün diye ayrı tablo.
+create table if not exists project_notes (
+  id           bigserial primary key,
+  project_id   bigint references projects(id) on delete cascade,
+  tarih        date not null default current_date,
+  tip          text default 'not',            -- not / karar / risk / musteri / saha / degisiklik
+  baslik       text,
+  icerik       text not null,
+  onemli       boolean default false,         -- panoda ve üstte öne çıkar
+  yazan_id     uuid references app_users(id),
+  created_at   timestamptz default now()
+);
+create index if not exists idx_pnotes_proj on project_notes (project_id, tarih desc);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 5. TEKLİF  (proje bazlı işte her şey teklifle başlar)
@@ -977,7 +995,7 @@ where e.durum = 'aktif' and e.sonraki_bakim is not null
 
 
 -- ══════════════════════════════════════════════════════════════════════════
--- BÖLÜM 2/3 · GÜVENLİK (RLS)
+-- BÖLÜM 2/4 · GÜVENLİK (RLS)
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ============================================================================
@@ -1022,6 +1040,7 @@ declare
     'material_suppliers','malzeme',
     'projects','proje',              'project_tasks','proje',
     'project_documents','dokuman',   'project_costs','maliyet',
+    'project_notes','proje',
     'quotes','satis',                'quote_lines','satis',
     'boms','bom',                    'bom_lines','bom',
     'purchase_requests','satinalma', 'purchase_request_lines','satinalma',
@@ -1093,7 +1112,7 @@ create trigger on_auth_user_created after insert on auth.users
 
 
 -- ══════════════════════════════════════════════════════════════════════════
--- BÖLÜM 3/3 · BAŞLANGIÇ VERİSİ
+-- BÖLÜM 3/4 · BAŞLANGIÇ VERİSİ
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ============================================================================
@@ -1231,6 +1250,76 @@ insert into quality_checklists (ad, tip, maddeler) values
    {"sira":6,"madde":"UPS / akü durumu","kriter":"ölçüm"}
  ]'::jsonb)
 on conflict (ad, tip) do nothing;
+
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- BÖLÜM 4/4 · GÜNCELLEME & DOSYA DEPOSU
+-- ══════════════════════════════════════════════════════════════════════════
+
+-- ============================================================================
+-- OMX ERP · MEVCUT KURULUMU GÜNCELLE / ONAR
+--
+-- `create table if not exists` yeni sütun eklemez; bu bölüm daha önce kurulmuş
+-- veritabanlarını güncel şemaya taşır. Yeni kurulumda hiçbir şey yapmaz.
+-- Her çalıştırmada güvenle tekrarlanabilir.
+-- ============================================================================
+
+-- ── Sonradan eklenen sütunlar ───────────────────────────────────────────────
+alter table project_documents add column if not exists dosya_adi  text;
+alter table project_documents add column if not exists dosya_tipi text;
+
+-- ── Kalite formu kopyalarını temizle, ardından benzersizlik kısıtını ekle ───
+-- (Betiğin eski sürümü tekrar çalıştırıldığında form kopyalıyordu.)
+delete from quality_checklists q
+ where exists (select 1 from quality_checklists q2
+                where q2.ad = q.ad and q2.tip is not distinct from q.tip and q2.id < q.id);
+
+do $$ begin
+  alter table quality_checklists add constraint quality_checklists_ad_tip_key unique (ad, tip);
+exception when duplicate_table or duplicate_object then null; end $$;
+
+-- ── Yeni tablolar için yetki ve RLS ─────────────────────────────────────────
+-- (02_rls.sql her çalıştırmada politikaları yeniden ürettiği için burada
+--  yalnızca tablo düzeyi yetkiler tazelenir.)
+grant select, insert, update, delete on all tables    in schema public to authenticated;
+grant usage, select                on all sequences in schema public to authenticated;
+
+-- ============================================================================
+-- DOSYA DEPOSU (Storage)
+-- Proje dosyaları (pdf, zip, xlsx, dwg, görsel…) 'omx-files' kovasında tutulur.
+-- Kova ve erişim politikaları burada kurulur; panelden elle açmaya gerek yok.
+-- ============================================================================
+do $$
+begin
+  if to_regclass('storage.buckets') is null then
+    raise notice 'storage şeması yok (yerel test) — kova adımı atlandı';
+    return;
+  end if;
+
+  insert into storage.buckets (id, name, public)
+  values ('omx-files', 'omx-files', true)
+  on conflict (id) do update set public = true;
+
+  -- Politikalar: oturum açmış kullanıcı yükler/siler, dosyalar herkese okunur
+  -- (public kova; bağlantıyı bilen erişir — hassas belge için kovayı private
+  --  yapıp imzalı bağlantıya geçilmelidir).
+  drop policy if exists omx_files_okuma     on storage.objects;
+  drop policy if exists omx_files_yukleme   on storage.objects;
+  drop policy if exists omx_files_guncelle  on storage.objects;
+  drop policy if exists omx_files_silme     on storage.objects;
+
+  create policy omx_files_okuma on storage.objects
+    for select using (bucket_id = 'omx-files');
+
+  create policy omx_files_yukleme on storage.objects
+    for insert to authenticated with check (bucket_id = 'omx-files');
+
+  create policy omx_files_guncelle on storage.objects
+    for update to authenticated using (bucket_id = 'omx-files');
+
+  create policy omx_files_silme on storage.objects
+    for delete to authenticated using (bucket_id = 'omx-files');
+end $$;
 
 -- ============================================================================
 -- YETKİLER — PostgREST'in (REST API) tabloları görebilmesi için.

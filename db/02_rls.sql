@@ -40,6 +40,7 @@ declare
     'material_suppliers','malzeme',
     'projects','proje',              'project_tasks','proje',
     'project_documents','dokuman',   'project_costs','maliyet',
+    'project_notes','proje',
     'quotes','satis',                'quote_lines','satis',
     'boms','bom',                    'bom_lines','bom',
     'purchase_requests','satinalma', 'purchase_request_lines','satinalma',

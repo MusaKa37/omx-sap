@@ -30,6 +30,47 @@ export const fmtTarihSaat = s => {
 
 export const bugun = () => new Date().toISOString().slice(0, 10);
 
+// 1536 → "1,5 KB" · 4.700.000 → "4,5 MB"
+export function fmtBoyut(b) {
+  const n = Number(b);
+  if (!n || isNaN(n)) return "—";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1048576).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} MB`;
+  return `${(n / 1073741824).toLocaleString("tr-TR", { maximumFractionDigits: 2 })} GB`;
+}
+
+// Dosya uzantısına göre renkli rozet
+const UZANTI_RENK = {
+  pdf: ["#b91c1c", "#fee2e2"],
+  zip: ["#7c3aed", "#ede9fe"], rar: ["#7c3aed", "#ede9fe"], "7z": ["#7c3aed", "#ede9fe"],
+  xlsx: ["#15803d", "#dcfce7"], xls: ["#15803d", "#dcfce7"], csv: ["#15803d", "#dcfce7"],
+  docx: ["#1d4ed8", "#dbeafe"], doc: ["#1d4ed8", "#dbeafe"],
+  pptx: ["#c2410c", "#ffedd5"],
+  dwg: ["#0e7490", "#cffafe"], dxf: ["#0e7490", "#cffafe"], step: ["#0e7490", "#cffafe"], stp: ["#0e7490", "#cffafe"],
+  png: ["#a16207", "#fef3c7"], jpg: ["#a16207", "#fef3c7"], jpeg: ["#a16207", "#fef3c7"],
+  gif: ["#a16207", "#fef3c7"], webp: ["#a16207", "#fef3c7"], svg: ["#a16207", "#fef3c7"],
+  txt: ["#475569", "#f1f5f9"], md: ["#475569", "#f1f5f9"], json: ["#475569", "#f1f5f9"],
+  ap15: ["#be185d", "#fce7f3"], zap: ["#be185d", "#fce7f3"], s7p: ["#be185d", "#fce7f3"],
+};
+
+export const uzanti = ad => {
+  const p = String(ad || "").split(".");
+  return p.length > 1 ? p.pop().toLowerCase().slice(0, 4) : "";
+};
+
+export function DosyaRozet({ ad, boyut = 34 }) {
+  const u = uzanti(ad);
+  const [f, b] = UZANTI_RENK[u] || ["#64748b", "#f1f5f9"];
+  return (
+    <div style={{ width: boyut, height: boyut, borderRadius: 7, background: b, color: f,
+      display: "grid", placeItems: "center", fontSize: u.length > 3 ? 8.5 : 10,
+      fontWeight: 800, letterSpacing: ".02em", textTransform: "uppercase", flexShrink: 0 }}>
+      {u || "?"}
+    </div>
+  );
+}
+
 // Türkçe/karışık sayı girdilerini doğru okur: "2.500,50" → 2500.5 · "1,250" → 1250
 export function parseSayi(s) {
   let str = String(s ?? "").replace(/[^0-9.,-]/g, "");
