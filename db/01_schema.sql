@@ -645,7 +645,9 @@ create table if not exists quality_checklists (
   tip          text default 'FAT',            -- FAT / SAT / periyodik / imalat
   proje_tipi   proje_tipi,
   maddeler     jsonb default '[]'::jsonb,     -- [{sira, madde, kriter}]
-  aktif        boolean default true
+  aktif        boolean default true,
+  -- Kurulum betiği tekrar çalıştırıldığında form kopyalanmasın
+  unique (ad, tip)
 );
 
 create table if not exists quality_records (

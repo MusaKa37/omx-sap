@@ -7,13 +7,14 @@ Paket boyutu ~72 kB (gzip).
 
 Site yayına alınsa bile veritabanı boşsa kimse giriş yapamaz. Sırayla:
 
-1. https://supabase.com/dashboard → proje → **SQL Editor**
-2. `db/01_schema.sql` içeriğini yapıştır, **Run**
-3. `db/02_rls.sql` → Run
-4. `db/03_seed.sql` → Run
-5. **Storage** → New bucket → ad: `omx-files`, Public işaretli
-6. **Authentication → Users → Add user** ile kendini ekle
-7. SQL Editor'de kendini yönetici yap:
+1. https://supabase.com/dashboard → proje → **SQL Editor** → New query
+2. `db/kurulum.sql` dosyasının **tamamını** yapıştır → **Run**
+   (üç dosyanın birleşimi; tekrar çalıştırılabilir, veriyi bozmaz.
+   Ayrı ayrı çalıştırmak isterseniz `01_schema` → `02_rls` → `03_seed` sırasıyla)
+3. Alttaki özet tablosunda `tablo 38 · gorunum 5 · rol 8` görüyorsan kurulum tamam
+4. **Storage** → New bucket → ad: `omx-files`, Public işaretli
+5. **Authentication → Users → Add user** ile kendini ekle (e-posta + şifre)
+6. SQL Editor'de kendini yönetici yap:
    ```sql
    update app_users set role_id = (select id from roles where kod='admin')
     where email = 'senin@epostan';

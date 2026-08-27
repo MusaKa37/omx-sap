@@ -132,4 +132,4 @@ insert into quality_checklists (ad, tip, maddeler) values
    {"sira":5,"madde":"Alarm geçmişi incelendi","kriter":"rapor"},
    {"sira":6,"madde":"UPS / akü durumu","kriter":"ölçüm"}
  ]'::jsonb)
-on conflict do nothing;
+on conflict (ad, tip) do nothing;

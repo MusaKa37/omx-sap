@@ -45,7 +45,8 @@ Tüm modüllerin veritabanı tabloları kurulu; ◻ işaretliler arayüz bekliyo
 
 ## Veritabanı
 
-`db/` altında üç dosya, sırayla çalıştırılır:
+`db/kurulum.sql` tek seferde her şeyi kurar (aşağıdaki üç dosyanın birleşimi +
+PostgREST yetkileri). Tekrar çalıştırılabilir. Ayrı ayrı çalıştırmak isterseniz:
 
 | Dosya | İçerik |
 |---|---|
