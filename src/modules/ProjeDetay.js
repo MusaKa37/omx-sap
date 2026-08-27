@@ -32,12 +32,15 @@ export default function ProjeDetay({ projeId, ozet, profil, yetkiVar, goster, ku
   const [ozetV, setOzetV]   = useState(ozet);
 
   const duzenleyebilir = yetkiVar("proje", "duzenle");
+  const sorumluAdi = kullanicilar.find(u => u.id === proje?.sorumlu_id)?.ad_soyad || null;
 
   const yukle = useCallback(async () => {
     setYuk(true);
     try {
       const [p, g, m, d, o] = await Promise.all([
-        api.one("projects", projeId, "*,musteri:companies(id,unvan,telefon,ilgili_kisi),sorumlu:app_users(id,ad_soyad,email)"),
+        // projects → app_users ilişkisi iki yabancı anahtar üzerinden kurulduğu için
+        // gömülü sorgu kullanılmaz; sorumlu, kullanicilar listesinden eşleştirilir.
+        api.one("projects", projeId, "*,musteri:companies(id,unvan,telefon,ilgili_kisi)"),
         api.list("project_tasks", { eq: { project_id: projeId }, order: "sira.asc,id.asc" }).catch(() => []),
         yetkiVar("maliyet") ? api.list("project_costs", { eq: { project_id: projeId }, order: "tarih.desc,id.desc", limit: 500 }).catch(() => []) : [],
         api.list("project_documents", { select: "*,yukleyen:app_users(ad_soyad)", eq: { project_id: projeId }, order: "created_at.desc" }).catch(() => []),
@@ -77,7 +80,7 @@ export default function ProjeDetay({ projeId, ozet, profil, yetkiVar, goster, ku
           <div style={{ fontSize: 13, color: T.renk.metinSoluk, marginTop: 7 }}>
             {proje.musteri?.unvan || "Müşteri atanmadı"} · {PROJE_TIPI_ETIKET[proje.tip] || proje.tip}
             {proje.saha_adi ? ` · ${proje.saha_adi}` : ""}
-            {proje.sorumlu?.ad_soyad ? ` · Sorumlu: ${proje.sorumlu.ad_soyad}` : ""}
+            {sorumluAdi ? ` · Sorumlu: ${sorumluAdi}` : ""}
           </div>
         </div>
         {duzenleyebilir && <Btn tur="birincil" onClick={() => onDuzenle(proje)} ikon="✎">Düzenle</Btn>}

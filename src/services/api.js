@@ -74,6 +74,21 @@ async function call(path, opts = {}, retry = true) {
 // ── Sorgu kurucu ────────────────────────────────────────────────────────────
 // api.list("projects", { select: "*,musteri:companies(unvan)", eq: { durum: "devam" },
 //                        ilike: { proje_adi: "pano" }, order: "termin.asc", limit: 50 })
+//
+// GÖMÜLÜ SORGU UYARISI
+// Bir tablonun hedefe BİRDEN FAZLA yabancı anahtarı varsa PostgREST hangisini
+// kullanacağını bilemez ve şu hatayı verir:
+//   "Could not embed because more than one relationship was found"
+// Şemadaki belirsiz çiftler:
+//   projects   → app_users  (sorumlu_id, created_by)
+//   boms       → app_users  (onaylayan_id, created_by)
+//   timesheets → app_users  (user_id, onaylayan_id)
+//   bom_lines  → materials  (material_id, alternatif_material_id)
+//   stock_moves→ warehouses (warehouse_id, hedef_warehouse_id)
+// Çözüm: ya sütunu "!" ile belirtin —
+//   select: "*,sorumlu:app_users!sorumlu_id(ad_soyad)"
+// ya da (tercih edilen) ilgili listeyi ayrıca yükleyip adı arayüzde eşleştirin;
+// böylece her satır için ek birleştirme maliyeti de doğmaz.
 function buildQuery(q = {}) {
   const p = new URLSearchParams();
   if (q.select) p.set("select", q.select);

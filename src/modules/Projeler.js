@@ -45,7 +45,11 @@ export default function Projeler({ profil, yetkiVar, goster }) {
     setYuk(true);
     try {
       const [p, o, m, k] = await Promise.all([
-        api.list("projects", { select: "*,musteri:companies(id,unvan),sorumlu:app_users(id,ad_soyad)",
+        // DİKKAT: projects tablosunun app_users'a İKİ yabancı anahtarı var
+        // (sorumlu_id ve created_by). Gömülü sorgu (sorumlu:app_users(...)) bu yüzden
+        // "more than one relationship was found" hatası verir. Sorumlu adı aşağıda
+        // yüklenen kullanıcı listesinden eşleştiriliyor.
+        api.list("projects", { select: "*,musteri:companies(id,unvan)",
                                order: "created_at.desc", limit: 500 }),
         api.list("v_project_summary", { limit: 500 }).catch(() => []),
         api.list("companies", { select: "id,unvan,kod", in: { tip: ["musteri", "her_ikisi"] },
@@ -60,6 +64,11 @@ export default function Projeler({ profil, yetkiVar, goster }) {
   }, [goster]);
 
   useEffect(() => { yukle(); }, [yukle]);
+
+  // Kullanıcı id → ad soyad eşlemesi (gömülü sorgu yerine yerel çözüm)
+  const adSoyad = useCallback(
+    id => kullanicilar.find(u => u.id === id)?.ad_soyad || null,
+    [kullanicilar]);
 
   // ── Filtreleme ────────────────────────────────────────────────────────────
   const filtreli = useMemo(() => liste.filter(p => {
@@ -196,7 +205,7 @@ export default function Projeler({ profil, yetkiVar, goster }) {
             render: r => <span style={{ fontSize: 12.5 }}>{PROJE_TIPI_ETIKET[r.tip] || r.tip}</span> },
           { anahtar: "durum", baslik: "Durum", genislik: 122, render: r => <Rozet durum={r.durum} /> },
           { anahtar: "sorumlu", baslik: "Sorumlu", genislik: 140,
-            render: r => <span style={{ fontSize: 12.5 }}>{r.sorumlu?.ad_soyad || "—"}</span> },
+            render: r => <span style={{ fontSize: 12.5 }}>{adSoyad(r.sorumlu_id) || "—"}</span> },
           { anahtar: "termin", baslik: "Termin", genislik: 104,
             render: r => {
               const gec = r.termin && new Date(r.termin) < new Date().setHours(0, 0, 0, 0)
