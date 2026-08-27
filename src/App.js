@@ -84,17 +84,33 @@ export default function App() {
 
   if (!SB_URL) return (
     <Ekran>
-      <Kart style={{ maxWidth: 520 }}>
-        <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>Supabase bağlantısı tanımlı değil</h2>
+      <Kart style={{ maxWidth: 560 }}>
+        <h2 style={{ margin: "0 0 8px", fontSize: 18 }}>Supabase bağlantısı tanımlı değil</h2>
         <p style={{ margin: 0, fontSize: 13.5, color: T.renk.metinSoluk, lineHeight: 1.7 }}>
-          Proje kökünde <code>.env.local</code> dosyası oluşturup şu iki satırı ekleyin,
-          ardından <code>npm start</code> komutunu yeniden çalıştırın:
+          Uygulama şu iki ortam değişkenine ihtiyaç duyuyor:
         </p>
         <pre style={{ background: "#0f172a", color: "#e2e8f0", padding: 14, borderRadius: 10,
-          fontSize: 12, overflowX: "auto", marginTop: 12 }}>
+          fontSize: 12, overflowX: "auto", margin: "12px 0 18px" }}>
 {`REACT_APP_SB_URL=https://xxxxx.supabase.co
-REACT_APP_SB_KEY=eyJhbGciOiJIUzI1NiIs...`}
+REACT_APP_SB_KEY=sb_publishable_...`}
         </pre>
+
+        <KurulumAdimi baslik="Yayındaki site (Vercel) için">
+          Settings → Environment Variables bölümüne ikisini de ekleyin
+          (Production, Preview ve Development kutularını işaretleyin), ardından
+          Deployments → son dağıtım → ⋯ → <b>Redeploy</b>. Değişkenler derleme
+          anında koda gömüldüğü için yeniden dağıtım yapmadan etkili olmaz.
+        </KurulumAdimi>
+
+        <KurulumAdimi baslik="Kendi bilgisayarınızda çalıştırıyorsanız">
+          Proje kökünde <code>.env.local</code> dosyası oluşturup iki satırı yazın,
+          sonra <code>npm start</code> komutunu yeniden çalıştırın.
+        </KurulumAdimi>
+
+        <p style={{ margin: "16px 0 0", fontSize: 12.5, color: T.renk.metinPasif, lineHeight: 1.65 }}>
+          Değerler: Supabase → Project Settings → API. Publishable (anon) anahtarı
+          kullanılır; <b>service_role</b> anahtarı buraya girilmez.
+        </p>
       </Kart>
     </Ekran>
   );
@@ -111,6 +127,16 @@ REACT_APP_SB_KEY=eyJhbGciOiJIUzI1NiIs...`}
       </Kabuk>
       <Bildirimler />
     </>
+  );
+}
+
+function KurulumAdimi({ baslik, children }) {
+  return (
+    <div style={{ borderLeft: `2px solid ${T.renk.marka}`, paddingLeft: 13, marginBottom: 14 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase",
+        color: T.renk.marka, marginBottom: 4 }}>{baslik}</div>
+      <div style={{ fontSize: 13, color: T.renk.metinSoluk, lineHeight: 1.65 }}>{children}</div>
+    </div>
   );
 }
 
