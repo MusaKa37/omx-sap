@@ -96,7 +96,12 @@ insert into departments (kod, ad) values
 on conflict (kod) do nothing;
 
 -- ── KALİTE CHECK-LİST ŞABLONLARI ─────────────────────────────────────────────
-insert into quality_checklists (ad, tip, maddeler) values
+-- Kısıta bağlı kalmayan ekleme: 'on conflict' hedefi, tablo eski bir kurulumdan
+-- geliyorsa (unique kısıt henüz yokken) hata veriyordu. 'where not exists' her
+-- şemada çalışır.
+insert into quality_checklists (ad, tip, maddeler)
+select v.ad, v.tip, v.maddeler
+  from (values
  ('Pano İmalat Kontrol', 'imalat', '[
    {"sira":1,"madde":"Kabin ölçüleri ve montaj plakası projeye uygun","kriter":"görsel"},
    {"sira":2,"madde":"Klemens etiketleme projeye uygun","kriter":"görsel"},
@@ -132,4 +137,8 @@ insert into quality_checklists (ad, tip, maddeler) values
    {"sira":5,"madde":"Alarm geçmişi incelendi","kriter":"rapor"},
    {"sira":6,"madde":"UPS / akü durumu","kriter":"ölçüm"}
  ]'::jsonb)
-on conflict (ad, tip) do nothing;
+  ) as v(ad, tip, maddeler)
+ where not exists (
+   select 1 from quality_checklists q
+    where q.ad = v.ad and q.tip is not distinct from v.tip
+ );

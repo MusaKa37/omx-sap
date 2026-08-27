@@ -48,11 +48,16 @@ Tüm modüllerin veritabanı tabloları kurulu; ◻ işaretliler arayüz bekliyo
 `db/kurulum.sql` tek seferde her şeyi kurar (aşağıdaki üç dosyanın birleşimi +
 PostgREST yetkileri). Tekrar çalıştırılabilir. Ayrı ayrı çalıştırmak isterseniz:
 
-| Dosya | İçerik |
-|---|---|
-| `01_schema.sql` | 38 tablo, 5 rapor görünümü, trigger'lar, belge numarası sayacı |
-| `02_rls.sql` | Satır bazlı güvenlik (RLS), 8 rol × 14 modül yetki matrisi |
-| `03_seed.sql` | Roller, yetkiler, malzeme kategorileri, depolar, kalite formları |
+| # | Dosya | İçerik |
+|---|---|---|
+| 1 | `01_schema.sql` | 39 tablo, 5 rapor görünümü, trigger'lar, belge numarası sayacı |
+| 2 | `02_onarim.sql` | Eski kurulumlara eksik sütun ve kısıtları ekler |
+| 3 | `03_rls.sql` | Satır bazlı güvenlik (RLS), 8 rol × 14 modül yetki matrisi |
+| 4 | `04_seed.sql` | Roller, yetkiler, malzeme kategorileri, depolar, kalite formları |
+| 5 | `05_storage.sql` | `omx-files` kovası ve dosya erişim politikaları |
+
+**Sıra önemlidir:** tohum verisi (4) onarım bölümünün (2) eklediği kısıtlara
+güvenir. `kurulum.sql` bu sırayı zaten uygular.
 
 ### Otomatik akışlar
 

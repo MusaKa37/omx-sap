@@ -2,17 +2,19 @@
 -- OMX ERP · TEK SEFERLİK KURULUM
 --
 -- Supabase → SQL Editor → New query → bu dosyanın TAMAMINI yapıştır → Run.
--- 01_schema + 02_rls + 03_seed dosyalarının sırayla birleştirilmiş hâlidir;
--- ayrıca PostgREST'in tabloları görebilmesi için gereken yetkileri verir.
+-- Hem sıfırdan kurar hem mevcut kurulumu günceller; tekrar çalıştırılabilir.
 --
--- Tekrar çalıştırılabilir: mevcut kurulumu bozmaz (create if not exists /
--- on conflict do nothing kullanılır).
+-- Bölümler ve SIRALARI önemlidir:
+--   1 ŞEMA     tabloları, trigger'ları, görünümleri oluşturur
+--   2 ONARIM   eski kurulumlara eksik sütun/kısıtları ekler  ← tohumdan ÖNCE
+--   3 GÜVENLİK RLS politikaları ve rol yetki matrisi
+--   4 TOHUM    roller, kategoriler, depolar, kalite formları
+--   5 DEPO     omx-files kovası ve dosya erişim politikaları
 -- ============================================================================
 
 
-
 -- ══════════════════════════════════════════════════════════════════════════
--- BÖLÜM 1/4 · ŞEMA
+-- BÖLÜM 1/5 · ŞEMA
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ============================================================================
@@ -995,7 +997,38 @@ where e.durum = 'aktif' and e.sonraki_bakim is not null
 
 
 -- ══════════════════════════════════════════════════════════════════════════
--- BÖLÜM 2/4 · GÜVENLİK (RLS)
+-- BÖLÜM 2/5 · ONARIM
+-- ══════════════════════════════════════════════════════════════════════════
+
+-- ============================================================================
+-- OMX ERP · ŞEMA ONARIMI (mevcut kurulumları güncelle)
+--
+-- `create table if not exists` yeni sütun eklemez; bu bölüm daha önce kurulmuş
+-- veritabanlarını güncel şemaya taşır. Yeni kurulumda hiçbir şey yapmaz.
+-- Her çalıştırmada güvenle tekrarlanabilir.
+-- ============================================================================
+
+-- ── Sonradan eklenen sütunlar ───────────────────────────────────────────────
+alter table project_documents add column if not exists dosya_adi  text;
+alter table project_documents add column if not exists dosya_tipi text;
+
+-- ── Kalite formu kopyalarını temizle, ardından benzersizlik kısıtını ekle ───
+-- (Betiğin eski sürümü tekrar çalıştırıldığında form kopyalıyordu.)
+delete from quality_checklists q
+ where exists (select 1 from quality_checklists q2
+                where q2.ad = q.ad and q2.tip is not distinct from q.tip and q2.id < q.id);
+
+do $$ begin
+  alter table quality_checklists add constraint quality_checklists_ad_tip_key unique (ad, tip);
+exception when duplicate_table or duplicate_object then null; end $$;
+
+
+-- NOT: Bu bölüm ŞEMA ile GÜVENLİK/TOHUM arasında çalışır. Tohum verisi burada
+-- eklenen kısıtlara güvendiği için sıra önemlidir; başa veya sona alınmamalıdır.
+
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- BÖLÜM 3/5 · GÜVENLİK (RLS)
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ============================================================================
@@ -1112,7 +1145,7 @@ create trigger on_auth_user_created after insert on auth.users
 
 
 -- ══════════════════════════════════════════════════════════════════════════
--- BÖLÜM 3/4 · BAŞLANGIÇ VERİSİ
+-- BÖLÜM 4/5 · BAŞLANGIÇ VERİSİ
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ============================================================================
@@ -1213,7 +1246,12 @@ insert into departments (kod, ad) values
 on conflict (kod) do nothing;
 
 -- ── KALİTE CHECK-LİST ŞABLONLARI ─────────────────────────────────────────────
-insert into quality_checklists (ad, tip, maddeler) values
+-- Kısıta bağlı kalmayan ekleme: 'on conflict' hedefi, tablo eski bir kurulumdan
+-- geliyorsa (unique kısıt henüz yokken) hata veriyordu. 'where not exists' her
+-- şemada çalışır.
+insert into quality_checklists (ad, tip, maddeler)
+select v.ad, v.tip, v.maddeler
+  from (values
  ('Pano İmalat Kontrol', 'imalat', '[
    {"sira":1,"madde":"Kabin ölçüleri ve montaj plakası projeye uygun","kriter":"görsel"},
    {"sira":2,"madde":"Klemens etiketleme projeye uygun","kriter":"görsel"},
@@ -1249,43 +1287,19 @@ insert into quality_checklists (ad, tip, maddeler) values
    {"sira":5,"madde":"Alarm geçmişi incelendi","kriter":"rapor"},
    {"sira":6,"madde":"UPS / akü durumu","kriter":"ölçüm"}
  ]'::jsonb)
-on conflict (ad, tip) do nothing;
+  ) as v(ad, tip, maddeler)
+ where not exists (
+   select 1 from quality_checklists q
+    where q.ad = v.ad and q.tip is not distinct from v.tip
+ );
 
 
 -- ══════════════════════════════════════════════════════════════════════════
--- BÖLÜM 4/4 · GÜNCELLEME & DOSYA DEPOSU
+-- BÖLÜM 5/5 · DOSYA DEPOSU
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ============================================================================
--- OMX ERP · MEVCUT KURULUMU GÜNCELLE / ONAR
---
--- `create table if not exists` yeni sütun eklemez; bu bölüm daha önce kurulmuş
--- veritabanlarını güncel şemaya taşır. Yeni kurulumda hiçbir şey yapmaz.
--- Her çalıştırmada güvenle tekrarlanabilir.
--- ============================================================================
-
--- ── Sonradan eklenen sütunlar ───────────────────────────────────────────────
-alter table project_documents add column if not exists dosya_adi  text;
-alter table project_documents add column if not exists dosya_tipi text;
-
--- ── Kalite formu kopyalarını temizle, ardından benzersizlik kısıtını ekle ───
--- (Betiğin eski sürümü tekrar çalıştırıldığında form kopyalıyordu.)
-delete from quality_checklists q
- where exists (select 1 from quality_checklists q2
-                where q2.ad = q.ad and q2.tip is not distinct from q.tip and q2.id < q.id);
-
-do $$ begin
-  alter table quality_checklists add constraint quality_checklists_ad_tip_key unique (ad, tip);
-exception when duplicate_table or duplicate_object then null; end $$;
-
--- ── Yeni tablolar için yetki ve RLS ─────────────────────────────────────────
--- (02_rls.sql her çalıştırmada politikaları yeniden ürettiği için burada
---  yalnızca tablo düzeyi yetkiler tazelenir.)
-grant select, insert, update, delete on all tables    in schema public to authenticated;
-grant usage, select                on all sequences in schema public to authenticated;
-
--- ============================================================================
--- DOSYA DEPOSU (Storage)
+-- OMX ERP · DOSYA DEPOSU (Supabase Storage)
 -- Proje dosyaları (pdf, zip, xlsx, dwg, görsel…) 'omx-files' kovasında tutulur.
 -- Kova ve erişim politikaları burada kurulur; panelden elle açmaya gerek yok.
 -- ============================================================================
@@ -1320,6 +1334,7 @@ begin
   create policy omx_files_silme on storage.objects
     for delete to authenticated using (bucket_id = 'omx-files');
 end $$;
+
 
 -- ============================================================================
 -- YETKİLER — PostgREST'in (REST API) tabloları görebilmesi için.

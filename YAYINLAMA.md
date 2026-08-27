@@ -10,7 +10,7 @@ Site yayına alınsa bile veritabanı boşsa kimse giriş yapamaz. Sırayla:
 1. https://supabase.com/dashboard → proje → **SQL Editor** → New query
 2. `db/kurulum.sql` dosyasının **tamamını** yapıştır → **Run**
    (üç dosyanın birleşimi; tekrar çalıştırılabilir, veriyi bozmaz.
-   Ayrı ayrı çalıştırmak isterseniz `01_schema` → `02_rls` → `03_seed` sırasıyla)
+   ayrı ayrı çalıştıracaksanız 01 → 02 → 03 → 04 → 05 sırasını bozmayın)
 3. Alttaki özet tablosunda `tablo 38 · gorunum 5 · rol 8` görüyorsan kurulum tamam
 4. **Storage** → New bucket → ad: `omx-files`, Public işaretli
 5. **Authentication → Users → Add user** ile kendini ekle (e-posta + şifre)

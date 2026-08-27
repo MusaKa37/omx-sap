@@ -9,10 +9,8 @@ PLC / HMI otomasyon.
 ### 1. Supabase projesi
 1. supabase.com üzerinde yeni bir proje aç (bölge: Frankfurt önerilir).
 2. **SQL Editor**'de sırayla çalıştır:
-   - `db/01_schema.sql` — tablolar, trigger'lar, rapor görünümleri
-   - `db/02_rls.sql`    — satır bazlı güvenlik ve rol yetkileri
-   - `db/03_seed.sql`   — roller, yetki matrisi, kategoriler, depolar, kalite formları
-3. **Storage** → `omx-files` adında bir bucket oluştur (public).
+   - `db/kurulum.sql` — hepsi tek dosyada (önerilen; tekrar çalıştırılabilir)
+   - Ayrı ayrı: `01_schema` → `02_onarim` → `03_rls` → `04_seed` → `05_storage`
 4. **Authentication → Users** üzerinden kullanıcıları ekle.
    Her yeni kullanıcı otomatik olarak `app_users` tablosuna en düşük yetkiyle
    (`saha`) düşer; rolünü SQL'den veya Ayarlar ekranından yükselt:
