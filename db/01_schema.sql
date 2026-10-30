@@ -187,6 +187,13 @@ create index if not exists idx_materials_kod  on materials using gin (malzeme_ko
 create index if not exists idx_materials_ad   on materials using gin (malzeme_adi  gin_trgm_ops);
 create index if not exists idx_materials_cat  on materials (category_id);
 
+-- Harf/bosluk farkiyla ayni parcanin tekrar acilmasini da engelle.
+create unique index if not exists materials_malzeme_kodu_normalized_uidx
+  on public.materials (upper(btrim(malzeme_kodu)));
+create unique index if not exists materials_uretici_parca_no_normalized_uidx
+  on public.materials (upper(btrim(uretici_parca_no)))
+  where nullif(btrim(uretici_parca_no), '') is not null;
+
 -- Malzeme ⇄ Tedarikçi fiyat ilişkisi (n:n, çok fiyatlı)
 create table if not exists material_suppliers (
   id           bigserial primary key,

@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { api, logAudit } from "../services/api";
+import { malzemeCakismalari, cakismaMesaji } from "./malzemeKontrol";
 import { T } from "../ui/theme";
 import { Kart, Baslik, Btn, Rozet, Tablo, Modal, Alan, Giris, Metin, Secim, Satir,
          Arama, Sekmeler, Olcum, OnayModal,
@@ -36,6 +37,8 @@ export default function Malzeme({ yetkiVar, goster }) {
   const [kay, setKay] = useState(false);
   const [detay, setDetay] = useState(null);
   const [silinecek, setSil] = useState(null);
+
+  const cakismalar = useMemo(() => form ? malzemeCakismalari(form, liste) : {}, [form, liste]);
 
   const ekleyebilir = yetkiVar("malzeme", "ekle");
   const duzenleyebilir = yetkiVar("malzeme", "duzenle");
@@ -108,8 +111,11 @@ export default function Malzeme({ yetkiVar, goster }) {
   }), [liste, ara, fKat, fAltKat, fTip, sekme, stoklar]);
 
   async function kaydet() {
+    if (kay) return;
     if (!form.malzeme_kodu.trim()) return goster("Malzeme kodu zorunlu.", "hata");
     if (!form.malzeme_adi.trim()) return goster("Malzeme adı zorunlu.", "hata");
+    const cakisanAlan = Object.keys(cakismalar)[0];
+    if (cakisanAlan) return goster(cakismaMesaji(cakisanAlan, cakismalar[cakisanAlan]), "hata");
     setKay(true);
     try {
       const govde = {
@@ -117,7 +123,7 @@ export default function Malzeme({ yetkiVar, goster }) {
         malzeme_adi: form.malzeme_adi.trim(), aciklama: form.aciklama || null,
         tip: form.tip, category_id: form.category_id || null, alt_kategori: form.alt_kategori || null,
         marka: form.marka || null, uretici: form.uretici || null,
-        uretici_parca_no: form.uretici_parca_no || null, birim: form.birim,
+        uretici_parca_no: form.uretici_parca_no?.trim() || null, birim: form.birim,
         kdv: Number(form.kdv) || 0,
         min_stok: parseSayi(form.min_stok) || 0, max_stok: parseSayi(form.max_stok) || 0,
         kritik_stok: parseSayi(form.kritik_stok) || 0,
@@ -283,7 +289,8 @@ export default function Malzeme({ yetkiVar, goster }) {
         {form && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <Satir>
-              <Alan etiket="Malzeme Kodu" zorunlu genislik="180px" ipucu="Benzersiz olmalı">
+              <Alan etiket="Malzeme Kodu" zorunlu genislik="180px" ipucu="Benzersiz olmalı"
+                hata={cakismaMesaji("malzeme_kodu", cakismalar.malzeme_kodu)}>
                 <Giris value={form.malzeme_kodu}
                   onChange={e => setForm(f => ({ ...f, malzeme_kodu: e.target.value }))}
                   placeholder="OTM-PLC-0012" />
@@ -315,7 +322,8 @@ export default function Malzeme({ yetkiVar, goster }) {
               <Alan etiket="Üretici" genislik="170px">
                 <Giris value={form.uretici || ""} onChange={e => setForm(f => ({ ...f, uretici: e.target.value }))} />
               </Alan>
-              <Alan etiket="Üretici Parça No" genislik="200px">
+              <Alan etiket="Üretici Parça No" genislik="200px" ipucu="Doluysa benzersiz olmalı"
+                hata={cakismaMesaji("uretici_parca_no", cakismalar.uretici_parca_no)}>
                 <Giris value={form.uretici_parca_no || ""}
                   onChange={e => setForm(f => ({ ...f, uretici_parca_no: e.target.value }))}
                   placeholder="6ES7214-1AG40-0XB0" />

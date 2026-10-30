@@ -45,7 +45,13 @@ function friendlyError(payload, status) {
   const msg = payload?.message || payload?.error_description || payload?.error || "";
   const code = payload?.code || "";
   if (status === 401 || status === 403) return "Bu işlem için yetkiniz yok.";
-  if (code === "23505") return "Bu kayıt zaten mevcut (benzersiz alan çakışması).";
+  if (code === "23505") {
+    if (/materials_malzeme_kodu_(key|normalized_uidx)/.test(msg))
+      return "Bu malzeme koduyla kayıtlı bir kart zaten var. Aynı kodla ikinci bir malzeme kaydedilemez.";
+    if (/materials_uretici_parca_no_normalized_uidx/.test(msg))
+      return "Bu üretici parça numarasıyla kayıtlı bir kart zaten var. Aynı parça tekrar kaydedilemez.";
+    return "Bu kayıt zaten mevcut (benzersiz alan çakışması).";
+  }
   if (code === "23503") return "Bu kayıt başka kayıtlarla ilişkili, önce onları düzenleyin.";
   if (code === "23502") return "Zorunlu bir alan boş bırakılmış.";
   if (code === "PGRST204" || /column .* does not exist|schema cache/i.test(msg))

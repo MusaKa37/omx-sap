@@ -10,6 +10,13 @@
 alter table project_documents add column if not exists dosya_adi  text;
 alter table project_documents add column if not exists dosya_tipi text;
 
+-- Malzeme kartlarinda tekrar kayit korumasi; mevcut verileri degistirmez.
+create unique index if not exists materials_malzeme_kodu_normalized_uidx
+  on public.materials (upper(btrim(malzeme_kodu)));
+create unique index if not exists materials_uretici_parca_no_normalized_uidx
+  on public.materials (upper(btrim(uretici_parca_no)))
+  where nullif(btrim(uretici_parca_no), '') is not null;
+
 -- ── Kalite formu kopyalarını temizle, ardından benzersizlik kısıtını ekle ───
 -- (Betiğin eski sürümü tekrar çalıştırıldığında form kopyalıyordu.)
 delete from quality_checklists q
