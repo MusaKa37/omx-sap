@@ -7,7 +7,7 @@ import { api, logAudit } from "../services/api";
 import { T } from "../ui/theme";
 import { Kart, Baslik, Btn, Rozet, Tablo, Modal, Alan, Giris, Metin, Secim, Satir,
          Arama, Sekmeler, Olcum, OnayModal,
-         fmtPara, fmtSayi, parseSayi, sayiMetni, eslesir } from "../ui/kit";
+         fmtPara, fmtSayi, parseSayi, sayiMetni, eslesir, trLower } from "../ui/kit";
 
 const TIPLER = [["hammadde", "Hammadde"], ["yari_mamul", "Yarı Mamul"], ["ticari_mal", "Ticari Mal"],
                 ["sarf", "Sarf Malzeme"], ["hizmet", "Hizmet"], ["ekipman", "Ekipman"]];
@@ -29,6 +29,7 @@ export default function Malzeme({ yetkiVar, goster }) {
   const [yuk, setYuk] = useState(true);
   const [ara, setAra] = useState("");
   const [fKat, setFKat] = useState("");
+  const [fAltKat, setFAltKat] = useState("");
   const [fTip, setFTip] = useState("");
   const [sekme, setSekme] = useState("aktif");
   const [form, setForm] = useState(null);
@@ -79,6 +80,17 @@ export default function Malzeme({ yetkiVar, goster }) {
 
   const katAd = id => kategoriler.find(k => k.id === id)?.ad || "—";
 
+  const altKategoriler = useMemo(() => {
+    const secenekler = new Map();
+    liste.forEach(m => {
+      if (fKat && String(m.category_id) !== String(fKat)) return;
+      const ad = (m.alt_kategori || "").trim();
+      const deger = trLower(ad);
+      if (ad && !secenekler.has(deger)) secenekler.set(deger, ad);
+    });
+    return [...secenekler].sort((a, b) => a[1].localeCompare(b[1], "tr"));
+  }, [liste, fKat]);
+
   const filtreli = useMemo(() => liste.filter(m => {
     if (sekme === "aktif" && !m.aktif) return false;
     if (sekme === "pasif" && m.aktif) return false;
@@ -87,12 +99,13 @@ export default function Malzeme({ yetkiVar, goster }) {
       if (!(Number(m.kritik_stok) > 0 && st <= Number(m.kritik_stok))) return false;
     }
     if (fKat && String(m.category_id) !== String(fKat)) return false;
+    if (fAltKat && trLower((m.alt_kategori || "").trim()) !== fAltKat) return false;
     if (fTip && m.tip !== fTip) return false;
     if (ara && !(eslesir(m.malzeme_kodu, ara) || eslesir(m.malzeme_adi, ara)
               || eslesir(m.marka, ara) || eslesir(m.uretici_parca_no, ara)
               || eslesir(m.aciklama, ara))) return false;
     return true;
-  }), [liste, ara, fKat, fTip, sekme, stoklar]);
+  }), [liste, ara, fKat, fAltKat, fTip, sekme, stoklar]);
 
   async function kaydet() {
     if (!form.malzeme_kodu.trim()) return goster("Malzeme kodu zorunlu.", "hata");
@@ -163,7 +176,12 @@ export default function Malzeme({ yetkiVar, goster }) {
         <Satir bosluk={10} style={{ alignItems: "center" }}>
           <Arama deger={ara} onDegisim={setAra} yer="Kod, ad, marka, üretici parça no…" genislik={320} />
           <div style={{ width: 230 }}>
-            <Secim value={fKat} onChange={e => setFKat(e.target.value)} secenekler={katAgac} bos="Tüm kategoriler" />
+            <Secim value={fKat} onChange={e => { setFKat(e.target.value); setFAltKat(""); }}
+              secenekler={katAgac} bos="Tüm kategoriler" aria-label="Kategori filtresi" />
+          </div>
+          <div style={{ width: 200 }}>
+            <Secim value={fAltKat} onChange={e => setFAltKat(e.target.value)}
+              secenekler={altKategoriler} bos="Tüm alt kategoriler" aria-label="Alt kategori filtresi" />
           </div>
           <div style={{ width: 170 }}>
             <Secim value={fTip} onChange={e => setFTip(e.target.value)} secenekler={TIPLER} bos="Tüm tipler" />
@@ -173,7 +191,7 @@ export default function Malzeme({ yetkiVar, goster }) {
       </Kart>
 
       <Tablo yukleniyor={yuk} veri={filtreli} onSatirTikla={m => setDetay(m)}
-        bosMesaj={ara || fKat || fTip ? "Filtreye uyan malzeme yok" : "Henüz malzeme kartı yok"}
+        bosMesaj={ara || fKat || fAltKat || fTip ? "Filtreye uyan malzeme yok" : "Henüz malzeme kartı yok"}
         sutunlar={[
           { anahtar: "malzeme_kodu", baslik: "Kod", genislik: 130,
             render: r => <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: T.renk.marka }}>{r.malzeme_kodu}</span> },
@@ -188,6 +206,8 @@ export default function Malzeme({ yetkiVar, goster }) {
             )},
           { anahtar: "category_id", baslik: "Kategori", genislik: 170,
             render: r => <span style={{ fontSize: 12.5 }}>{katAd(r.category_id)}</span> },
+          { anahtar: "alt_kategori", baslik: "Alt Kategori", genislik: 150,
+            render: r => <span style={{ fontSize: 12.5 }}>{r.alt_kategori?.trim() || "—"}</span> },
           { anahtar: "tip", baslik: "Tip", genislik: 120,
             render: r => <span style={{ fontSize: 12.5 }}>{TIP_ETIKET[r.tip] || r.tip}</span> },
           { anahtar: "birim", baslik: "Birim", genislik: 80 },
@@ -354,3 +374,4 @@ export default function Malzeme({ yetkiVar, goster }) {
     </>
   );
 }
+
